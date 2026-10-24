@@ -71,7 +71,7 @@ server.on('error', (error) => {
   process.exitCode = 1;
 });
 
-server.listen(port, host, () => {
+server.listen(port, "0.0.0.0", () => {
   console.log(`Карта пространства: http://${host}:${server.address().port}`);
   console.log('Этап 1: общая страница. Остановка: Ctrl + C.');
 });
