@@ -17,6 +17,10 @@ const pages = new Map([
   ['/test/venue', new URL('../test/venue-test.html', import.meta.url)],
 ]);
 const assets = new Map([
+  ['/src/visitor/visitor.js', [new URL('../src/visitor/visitor.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/visitor/geometry.js', [new URL('../src/visitor/geometry.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/visitor/demo.js', [new URL('../src/visitor/demo.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/visitor/visitor.css', [new URL('../src/visitor/visitor.css', import.meta.url), 'text/css; charset=utf-8']],
   ['/src/main.js', [new URL('../src/main.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/src/styles/base.css', [new URL('../src/styles/base.css', import.meta.url), 'text/css; charset=utf-8']],
   ['/src/editor/editor.js', [new URL('../src/editor/editor.js', import.meta.url), 'text/javascript; charset=utf-8']],
