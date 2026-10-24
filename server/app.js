@@ -11,16 +11,21 @@ const planViewBoxHeight = 600;
 const indexFile = new URL('../index.html', import.meta.url);
 const pages = new Map([
   ['/', indexFile],
-  ['/map/demo', indexFile],
-  ['/editor/demo', indexFile],
+  ['/map', indexFile],
   ['/constructor', indexFile],
   ['/test/venue', new URL('../test/venue-test.html', import.meta.url)],
 ]);
 const assets = new Map([
   ['/src/main.js', [new URL('../src/main.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/src/styles/base.css', [new URL('../src/styles/base.css', import.meta.url), 'text/css; charset=utf-8']],
-  ['/src/editor/editor.js', [new URL('../src/editor/editor.js', import.meta.url), 'text/javascript; charset=utf-8']],
-  ['/src/editor/editor.css', [new URL('../src/editor/editor.css', import.meta.url), 'text/css; charset=utf-8']],
+  ['/src/visitor/visitor-shell.js', [new URL('../src/visitor/visitor-shell.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/visitor/visitor-shell.css', [new URL('../src/visitor/visitor-shell.css', import.meta.url), 'text/css; charset=utf-8']],
+  ['/src/visitor/visitor-map.js', [new URL('../src/visitor/visitor-map.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/visitor/visitor-map.css', [new URL('../src/visitor/visitor-map.css', import.meta.url), 'text/css; charset=utf-8']],
+  ['/src/panorama/panorama-viewer.js', [new URL('../src/panorama/panorama-viewer.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/panorama/panorama-viewer.css', [new URL('../src/panorama/panorama-viewer.css', import.meta.url), 'text/css; charset=utf-8']],
+  ['/src/shared/navigation-targets.js', [new URL('../src/shared/navigation-targets.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/shared/pathfinder.js', [new URL('../src/shared/pathfinder.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/test/venue-test.js', [new URL('../test/venue-test.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/test/venue-test.css', [new URL('../test/venue-test.css', import.meta.url), 'text/css; charset=utf-8']],
   ['/src/constructor/constructor.js', [new URL('../src/constructor/constructor.js', import.meta.url), 'text/javascript; charset=utf-8']],
@@ -385,7 +390,11 @@ export function createAppServer({ store, organizerToken = '', backgroundDirector
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         return respondJson(req, res, 405, { error: 'method_not_allowed' }, { Allow: 'GET, HEAD' });
       }
-      if (/^\/map\/[^/]+$/.test(pathname) && pathname !== '/map/demo') {
+      if (pathname === '/editor/demo' || pathname === '/map/demo') {
+        res.writeHead(302, { Location: pathname === '/editor/demo' ? '/constructor' : '/map' });
+        return res.end();
+      }
+      if (/^\/map\/[^/]+$/.test(pathname)) {
         return respond(req, res, 200, 'text/html; charset=utf-8', await readFile(indexFile));
       }
       if (pages.has(pathname)) {

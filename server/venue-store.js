@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 
 const elementTypes = new Set(['zone', 'table', 'stand', 'stage', 'partition']);
-const placeTypes = new Set(['entrance', 'registration', 'service']);
+const placeTypes = new Set(['entrance', 'registration', 'service', 'wifi']);
 const storeSchemaVersion = 1;
 const planWidth = 1000;
 const planHeight = 600;
@@ -119,15 +119,20 @@ function validatePlaces(value, path, usedIds) {
   return value.map((item, index) => {
     const itemPath = `${path}[${index}]`;
     requireObject(item, itemPath);
-    requireKeys(item, ['id', 'type', 'name', 'category', 'description', 'x', 'y'], [], itemPath);
+    requireKeys(item, ['id', 'type', 'name', 'category', 'description', 'x', 'y'], ['wifiLogin', 'wifiPassword'], itemPath);
     const type = requireString(item.type, `${itemPath}.type`, 24);
     if (!placeTypes.has(type)) invalid(`${itemPath}.type не поддерживается.`);
+    if (type !== 'wifi' && (Object.hasOwn(item, 'wifiLogin') || Object.hasOwn(item, 'wifiPassword'))) invalid(`${itemPath}: поля Wi-Fi допускаются только для точки Wi-Fi.`);
     return {
       id: requireId(item.id, `${itemPath}.id`, usedIds),
       type,
       name: requireString(item.name, `${itemPath}.name`, 120),
       category: requireString(item.category, `${itemPath}.category`, 80, true),
       description: requireString(item.description, `${itemPath}.description`, 2000, true),
+      ...(type === 'wifi' ? {
+        wifiLogin: requireString(item.wifiLogin ?? '', `${itemPath}.wifiLogin`, 120, true),
+        wifiPassword: requireString(item.wifiPassword ?? '', `${itemPath}.wifiPassword`, 120, true),
+      } : {}),
       ...validatePoint({ x: item.x, y: item.y }, itemPath),
     };
   });
@@ -250,9 +255,10 @@ function validateFloors(value, usedIds) {
     const panoramaPoints = validatePanoramaPoints(floor.panoramaPoints, `${path}.panoramaPoints`, usedIds);
     const routeNodes = validateRouteNodes(floor.routeNodes, `${path}.routeNodes`, usedIds);
     const routeNodeIds = new Set(routeNodes.map((node) => node.id));
-    const placeIds = new Set(places.map((place) => place.id));
+    const placeIds = new Set([...places.map((place) => place.id),
+      ...elements.filter((element) => ['zone', 'stand', 'stage'].includes(element.type)).map((element) => element.id)]);
     for (const node of routeNodes) {
-      if (node.placeId && !placeIds.has(node.placeId)) invalid(`${path}.routeNodes содержит ссылку на неизвестное место.`);
+      if (node.placeId && !placeIds.has(node.placeId)) invalid(`${path}.routeNodes содержит ссылку на недоступную точку маршрута.`);
     }
     const routeEdges = validateRouteEdges(floor.routeEdges, `${path}.routeEdges`, usedIds, routeNodeIds);
     const plan = { id: planId, width, height, elements };

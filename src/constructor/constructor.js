@@ -1,3 +1,6 @@
+import { navigationDisplayName, navigationTargets } from '../shared/navigation-targets.js';
+import { plannedRoute } from '../visitor/visitor-map.js';
+
 const PLAN_WIDTH = 1000;
 const PLAN_HEIGHT = 600;
 const HISTORY_LIMIT = 100;
@@ -141,14 +144,18 @@ const elementTypes = {
   table: 'Стол',
   stand: 'Стенд',
   stage: 'Сцена',
-  partition: 'Перегородка',
+  partition: 'Стена',
 };
 
 const placeTypes = {
   entrance: 'Вход',
   registration: 'Регистрация',
   service: 'Сервисная точка',
+  wifi: 'Wi-Fi',
 };
+
+const availableElementTools = ['zone', 'stand', 'stage', 'partition'];
+const availablePlaceTools = ['entrance', 'registration', 'wifi'];
 
 const handleCorners = {
   nw: [-1, -1],
@@ -193,6 +200,14 @@ export function mountConstructor(container) {
   let selected = null;
   let activeTab = 'objects';
   let activeTool = 'select';
+  let routeFromId = '';
+  let routeToId = '';
+  let routeWaypoints = [];
+  let editingRouteEdgeId = null;
+  let showRouteNetwork = false;
+  let previewRoutePath = null;
+  let selectedRouteEdgeId = null;
+  let helpOpen = false;
   let temporaryHand = false;
   let isSaving = false;
   let isDirty = false;
@@ -204,7 +219,6 @@ export function mountConstructor(container) {
   let pointerAction = null;
   let propertyStart = null;
   let savedSnapshot = '';
-  let shareUrl = '';
   let backgroundOpacityStart = null;
   const undoStack = [];
   const redoStack = [];
@@ -448,14 +462,16 @@ export function mountConstructor(container) {
   function renderToolPanel() {
     const panel = container.querySelector('[data-role="tool-panel"]');
     panel.replaceChildren();
-    const tools = activeTab === 'objects'
+    const tools = activeTab === 'routes'
+      ? [['select', 'Просмотр'], ['route:point', 'Изгибы (необязательно)'], ['hand', 'Сдвиг карты']]
+      : activeTab === 'objects'
       ? [
         ['select', 'Выбор'], ['hand', 'Сдвиг карты'],
-        ...Object.entries(elementTypes).map(([key, label]) => [`element:${key}`, label]),
+        ...availableElementTools.map((key) => [`element:${key}`, elementTypes[key]]),
       ]
       : [
         ['select', 'Выбор'], ['hand', 'Сдвиг карты'],
-        ...Object.entries(placeTypes).map(([key, label]) => [`place:${key}`, label]),
+        ...availablePlaceTools.map((key) => [`place:${key}`, placeTypes[key]]),
       ];
     for (const [tool, label] of tools) {
       panel.append(makeButton(label, `tool:${tool}`, { selected: activeTool === tool }));
@@ -465,6 +481,7 @@ export function mountConstructor(container) {
   function toolLabel(tool) {
     if (tool === 'select') return 'Выбор';
     if (tool === 'hand') return 'Сдвиг карты';
+    if (tool === 'route:point') return 'Поставьте точки вдоль прохода';
     const type = tool.startsWith('element:') ? tool.slice(8) : tool.slice(6);
     return elementTypes[type] ?? placeTypes[type] ?? 'Размещение';
   }
@@ -512,8 +529,13 @@ export function mountConstructor(container) {
       `<label>Название<input data-property="name" maxlength="120" value="${escapeHtml(item.name)}"></label>`,
     ];
     if (!isElement) {
-      fields.push(`<label>Категория<input data-property="category" maxlength="80" value="${escapeHtml(item.category)}"></label>`);
-      fields.push(`<label>Описание<textarea data-property="description" maxlength="2000" rows="3">${escapeHtml(item.description)}</textarea></label>`);
+      if (item.type === 'wifi') {
+        fields.push(`<label>Логин (название сети)<input data-property="wifiLogin" maxlength="120" value="${escapeHtml(item.wifiLogin ?? '')}" placeholder="Например: EventWiFi"></label>`);
+        fields.push(`<label>Пароль<input data-property="wifiPassword" maxlength="120" value="${escapeHtml(item.wifiPassword ?? '')}" placeholder="Пароль для посетителей"></label>`);
+      } else {
+        fields.push(`<label>Категория<input data-property="category" maxlength="80" value="${escapeHtml(item.category)}"></label>`);
+        fields.push(`<label>Описание (видно посетителю в карточке места)<textarea data-property="description" maxlength="2000" rows="3">${escapeHtml(item.description)}</textarea></label>`);
+      }
     }
     if (isElement) {
       fields.push(`<button type="button" data-action="rotate">Повернуть на 90°</button>`);
@@ -557,6 +579,35 @@ export function mountConstructor(container) {
     const zones = floor.plan.elements.filter((item) => item.type === 'zone');
     const otherElements = floor.plan.elements.filter((item) => item.type !== 'zone');
     for (const item of [...zones, ...otherElements]) renderElement(world, item);
+    const nodeById = new Map(floor.routeNodes.map((node) => [node.id, node]));
+    for (const edge of floor.routeEdges) {
+      if (edge.id === editingRouteEdgeId) continue;
+      if (!showRouteNetwork && edge.id !== selectedRouteEdgeId) continue;
+      const from = nodeById.get(edge.fromNodeId);
+      const to = nodeById.get(edge.toNodeId);
+      if (!from || !to) continue;
+      const points = [from, ...edge.points, to].map((point) => `${point.x * PLAN_WIDTH},${point.y * PLAN_HEIGHT}`).join(' ');
+      world.append(svgElement('polyline', {
+        class: edge.id === selectedRouteEdgeId ? 'constructor-route-line constructor-route-line--selected' : 'constructor-route-line',
+        points, 'pointer-events': 'none',
+      }));
+    }
+    if (previewRoutePath) world.append(svgElement('polyline', {
+      class: 'constructor-route-result',
+      points: previewRoutePath.map((point) => `${point.x},${point.y}`).join(' '),
+      'pointer-events': 'none',
+    }));
+    const targets = navigationTargets(floor);
+    const from = targets.find((target) => target.id === routeFromId);
+    const to = targets.find((target) => target.id === routeToId);
+    if (activeTab === 'routes' && from && to && (routeWaypoints.length || editingRouteEdgeId)) {
+      const points = [from, ...routeWaypoints, to].map((point) => `${point.x * PLAN_WIDTH},${point.y * PLAN_HEIGHT}`).join(' ');
+      world.append(svgElement('polyline', { class: 'constructor-route-preview', points, 'pointer-events': 'none' }));
+      for (const [index, point] of routeWaypoints.entries()) world.append(svgElement('circle', {
+        class: 'constructor-route-waypoint', cx: point.x * PLAN_WIDTH, cy: point.y * PLAN_HEIGHT,
+        r: 10, 'data-waypoint-index': index, 'aria-label': `Точка изгиба ${index + 1}`,
+      }));
+    }
     for (const item of floor.places) renderPlace(world, item);
     if (backgroundEditing && planBackground) renderBackgroundEditFrame(world, planBackground);
     else renderSelection(world);
@@ -610,7 +661,7 @@ export function mountConstructor(container) {
     const x = item.x * PLAN_WIDTH;
     const y = item.y * PLAN_HEIGHT;
     const group = svgElement('g', {
-      class: 'constructor-place',
+      class: `constructor-place constructor-place--${item.type}`,
       'data-entity-kind': 'place',
       'data-entity-id': item.id,
     });
@@ -675,8 +726,8 @@ export function mountConstructor(container) {
             <span class="constructor-save-status" data-role="save-status" role="status" aria-live="polite"></span>
             <button type="button" class="constructor-primary" data-action="save">Сохранить</button>
             <button type="button" data-action="export">Выгрузить JSON</button>
-            <button type="button" data-action="share" disabled title="Просмотр карты ещё подключается">Поделиться</button>
-            <small class="constructor-share-note">Просмотр карты ещё подключается</small>
+            <button type="button" data-action="share">Ссылка на карту</button>
+            <small class="constructor-share-note">${isDirty ? 'Сначала сохраните изменения' : 'Откройте карту посетителя'}</small>
             <button type="button" data-action="exit">Выйти</button>
           </div>
           ${needsOrganizerKey ? `<form class="constructor-auth-retry" data-form="organizer-retry" autocomplete="off">
@@ -686,13 +737,26 @@ export function mountConstructor(container) {
         </header>
         <div class="constructor-layout">
           <aside class="constructor-left-panel">
-            <div class="constructor-tabs" role="tablist" aria-label="Типы объектов">
+            <div class="constructor-tabs" role="tablist" aria-label="Разделы конструктора">
               <button type="button" role="tab" aria-selected="${activeTab === 'objects'}" data-action="tab" data-tab="objects">Объекты</button>
               <button type="button" role="tab" aria-selected="${activeTab === 'places'}" data-action="tab" data-tab="places">Места</button>
+              <button type="button" role="tab" aria-selected="${activeTab === 'routes'}" data-action="tab" data-tab="routes">Маршрут</button>
             </div>
+            <details class="constructor-help" data-help ${helpOpen ? 'open' : ''}>
+              <summary>Как работать с картой и маршрутами</summary>
+              <ol>
+                <li>Загрузите подложку плана либо рисуйте на пустом плане. Во вкладке «Объекты» нарисуйте «Зону» как большую область, например рабочее пространство с множеством столов. Размер зоны можно менять за углы. «Стенд» и «Сцена» — объекты, к которым можно вести маршрут. «Стена» — препятствие без маршрута.</li>
+                <li>Во вкладке «Места» поставьте вход, регистрацию и при необходимости точку Wi-Fi. У неё заполните «Логин (название сети)» и «Пароль»: посетитель увидит их в карточке этой точки. Для пути в рабочую зону поставьте регистрацию у её доступного входа. Отдельные столы добавлять не нужно.</li>
+                <li>Посетитель может начать и закончить маршрут в любой свободной точке плана. Без ручной разметки путь автоматически обходит стены, стенды и сцену, но рабочая зона остаётся проходимой. К сцене путь подходит со свободной стороны и заканчивается у края.</li>
+                <li>Маршруты строятся автоматически: организатору достаточно разместить препятствия и места. Во вкладке «Маршрут» проверьте несколько пар точек. Если нужен конкретный проход, можно необязательно добавить предпочтительный участок и отредактировать его изгибы.</li>
+                <li>Кнопка «Проверить путь» показывает один синий маршрут; сеть проходов скрыта по умолчанию и включается отдельно. Получите «Ссылку на карту» и проверьте путь как посетитель.</li>
+              </ol>
+              <p>«Сдвиг карты» перемещает только вид увеличенного плана. Для переноса объекта используйте «Выбор».</p>
+            </details>
             <p class="constructor-panel-heading">Инструменты</p>
             <div class="constructor-tools" data-role="tool-panel"></div>
-            <p class="constructor-tool-hint">Выберите инструмент и щёлкните по плану, чтобы разместить объект.</p>
+            <p class="constructor-tool-hint">${activeTab === 'routes' ? 'Выберите начало и конец и нажмите «Проверить путь». Рисовать линии не нужно.' : 'Выберите инструмент и щёлкните по плану, чтобы разместить объект.'}</p>
+            <section class="constructor-route-panel" data-role="route-panel" ${activeTab === 'routes' ? '' : 'hidden'}></section>
           </aside>
 
           <section class="constructor-canvas-panel" aria-label="Рабочая область плана">
@@ -716,10 +780,16 @@ export function mountConstructor(container) {
                 <button type="button" data-action="zoom-out" aria-label="Уменьшить">−</button>
                 <button type="button" data-action="zoom-in" aria-label="Увеличить">+</button>
                 <button type="button" data-action="fit">Показать весь план</button>
+                <span class="constructor-pan-controls" aria-label="Сдвиг просмотра">
+                  <button type="button" data-action="pan-left" aria-label="Сдвинуть план влево">←</button>
+                  <button type="button" data-action="pan-up" aria-label="Сдвинуть план вверх">↑</button>
+                  <button type="button" data-action="pan-down" aria-label="Сдвинуть план вниз">↓</button>
+                  <button type="button" data-action="pan-right" aria-label="Сдвинуть план вправо">→</button>
+                </span>
               </div>
             </div>
             <div class="constructor-canvas-viewport" data-role="canvas-viewport">
-              <svg class="constructor-canvas" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="План этажа">
+              <svg class="constructor-canvas" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="План площадки">
                 <defs>
                   <pattern id="constructor-grid" width="40" height="40" patternUnits="userSpaceOnUse">
                     <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e6ece7" stroke-width="1" />
@@ -748,7 +818,7 @@ export function mountConstructor(container) {
 
     const title = container.querySelector('[data-role="venue-title"]');
     title.textContent = venue.name;
-    container.querySelector('[data-role="venue-id"]').textContent = `${venue.id} · ${venue.floors.length} этаж`;
+    container.querySelector('[data-role="venue-id"]').textContent = `План · ID ${venue.id}`;
     renderToolPanel();
     container.querySelector('[data-role="mode-label"]').textContent = toolLabel(activeTool);
     renderListsAndProperties();
@@ -765,6 +835,131 @@ export function mountConstructor(container) {
     renderProperties();
     renderList('[data-role="element-list"]', 'element', elementTypes, floor.plan.elements);
     renderList('[data-role="place-list"]', 'place', placeTypes, floor.places);
+    renderRoutePanel();
+  }
+
+  function renderRoutePanel() {
+    const panel = container.querySelector('[data-role="route-panel"]');
+    if (!panel || activeTab !== 'routes') return;
+    const floor = currentFloor();
+    if (editingRouteEdgeId && !floor.routeEdges.some((edge) => edge.id === editingRouteEdgeId)) {
+      editingRouteEdgeId = null;
+      routeWaypoints = [];
+    }
+    const targets = navigationTargets(floor);
+    if (!targets.some((target) => target.id === routeFromId)) routeFromId = targets[0]?.id ?? '';
+    if (!targets.some((target) => target.id === routeToId)) routeToId = targets.find((target) => target.id !== routeFromId)?.id ?? '';
+    const options = targets.map((target) => `<option value="${escapeHtml(target.id)}">${escapeHtml(navigationDisplayName(target))}</option>`).join('');
+    const nodeById = new Map(floor.routeNodes.map((node) => [node.id, node]));
+    const placeById = new Map(targets.map((target) => [target.id, target]));
+    panel.innerHTML = `
+      <h2>Автоматический маршрут</h2>
+      <p>Разместите стены, сцену и стенды. Система сама найдёт путь между доступными точками и обойдёт препятствия. На этой вкладке можно проверить результат; сохранять маршрут для каждой пары не требуется.</p>
+      <label>Откуда<select data-route-from><option value="">Выберите место</option>${options}</select></label>
+      <label>Куда<select data-route-to><option value="">Выберите место</option>${options}</select></label>
+      <div class="constructor-route-actions">
+        <button type="button" class="constructor-primary" data-action="route-check" ${targets.length > 1 ? '' : 'disabled'}>Проверить путь</button>
+      </div>
+      <p>Синяя линия — автоматически рассчитанный путь.</p>
+      ${activeTool === 'route:point' || editingRouteEdgeId || routeWaypoints.length ? `
+      <h3>Дополнительно: предпочтительный проход</h3>
+      <p>Эта настройка необязательна. Отметьте изгибы на плане, если путь должен идти через определённое место. После сохранения система всё равно проверит обход препятствий.</p>
+      <p>${editingRouteEdgeId ? 'Редактирование участка' : 'Новый участок'} · точек изгиба: <strong>${routeWaypoints.length}</strong></p>
+      <div class="constructor-route-waypoint-list">${routeWaypoints.map((point, index) => `
+        <div class="constructor-route-point-row">
+          <strong>Изгиб ${index + 1}</strong>
+          <label>X, %<input type="number" min="0" max="100" step="0.1" value="${(point.x * 100).toFixed(1)}" data-waypoint-coordinate="x" data-index="${index}"></label>
+          <label>Y, %<input type="number" min="0" max="100" step="0.1" value="${(point.y * 100).toFixed(1)}" data-waypoint-coordinate="y" data-index="${index}"></label>
+          <button type="button" data-action="route-remove-point" data-index="${index}" aria-label="Удалить изгиб ${index + 1}">×</button>
+        </div>`).join('')}</div>
+      <div class="constructor-route-actions">
+        <button type="button" data-action="route-undo-point" ${routeWaypoints.length ? '' : 'disabled'}>Убрать последнюю</button>
+        <button type="button" class="constructor-primary" data-action="route-add" ${targets.length > 1 ? '' : 'disabled'}>${editingRouteEdgeId ? 'Сохранить участок' : 'Добавить участок'}</button>
+        ${editingRouteEdgeId ? '<button type="button" data-action="route-cancel-edit">Отмена правки</button>' : ''}
+      </div>
+      ` : '<p>Для особого участка можно выбрать инструмент «Изгибы (необязательно)».</p>'}
+      ${floor.routeEdges.length ? `<h3>Сохранённые предпочтительные участки</h3>
+      <p>Кнопка «Показать» выделяет один участок на плане; «Изменить» открывает его изгибы.</p>
+      ${floor.routeEdges.length > 1 ? `<button type="button" data-action="route-toggle-network" aria-pressed="${showRouteNetwork}">${showRouteNetwork ? 'Скрыть все участки' : 'Показать все участки'}</button>
+      <p>Все участки отображаются тонкими линиями для общей проверки. Посетитель видит только рассчитанный для него путь.</p>` : ''}
+      <div class="constructor-route-edges">${floor.routeEdges.map((edge) => {
+        const from = placeById.get(nodeById.get(edge.fromNodeId)?.placeId)?.name ?? 'Узел';
+        const to = placeById.get(nodeById.get(edge.toNodeId)?.placeId)?.name ?? 'Узел';
+        return `<div><span>${escapeHtml(from)} → ${escapeHtml(to)}</span><button type="button" data-action="route-show-edge" data-id="${escapeHtml(edge.id)}">Показать</button><button type="button" data-action="route-edit" data-id="${escapeHtml(edge.id)}">Изменить</button><button type="button" data-action="route-delete" data-id="${escapeHtml(edge.id)}" aria-label="Удалить участок ${escapeHtml(from)} — ${escapeHtml(to)}">Удалить</button></div>`;
+      }).join('')}</div>` : ''}`;
+    panel.querySelector('[data-route-from]').value = routeFromId;
+    panel.querySelector('[data-route-to]').value = routeToId;
+  }
+
+  function syncRouteNodes() {
+    const floor = currentFloor();
+    const placeById = new Map(navigationTargets(floor).map((target) => [target.id, target]));
+    for (const node of floor.routeNodes) {
+      const place = placeById.get(node.placeId);
+      if (place) { node.x = place.x; node.y = place.y; node.name = place.name; }
+    }
+  }
+
+  function routeNodeForPlace(place) {
+    const floor = currentFloor();
+    let node = floor.routeNodes.find((entry) => entry.placeId === place.id);
+    if (!node) {
+      node = { id: createId(), name: place.name, x: place.x, y: place.y, placeId: place.id };
+      floor.routeNodes.push(node);
+    }
+    return node;
+  }
+
+  function addRouteSegment() {
+    const floor = currentFloor();
+    const targets = navigationTargets(floor);
+    const from = targets.find((target) => target.id === routeFromId);
+    const to = targets.find((target) => target.id === routeToId);
+    if (!from || !to || from.id === to.id) return setNotice('Выберите два разных места.', 'error');
+    const fromNode = floor.routeNodes.find((node) => node.placeId === from.id);
+    const toNode = floor.routeNodes.find((node) => node.placeId === to.id);
+    if (fromNode && toNode && floor.routeEdges.some((edge) => edge.id !== editingRouteEdgeId && (
+      (edge.fromNodeId === fromNode.id && edge.toNodeId === toNode.id)
+      || (edge.fromNodeId === toNode.id && edge.toNodeId === fromNode.id)))) {
+      return setNotice('Эти точки уже соединены. Удалите старый участок, чтобы перерисовать его.', 'error');
+    }
+    const before = captureSnapshot();
+    const first = routeNodeForPlace(from);
+    const last = routeNodeForPlace(to);
+    const edited = floor.routeEdges.find((edge) => edge.id === editingRouteEdgeId);
+    if (edited) {
+      edited.fromNodeId = first.id;
+      edited.toNodeId = last.id;
+      edited.points = routeWaypoints.map((point) => ({ ...point }));
+    } else {
+      floor.routeEdges.push({ id: createId(), fromNodeId: first.id, toNodeId: last.id, points: routeWaypoints.map((point) => ({ ...point })) });
+    }
+    routeWaypoints = [];
+    editingRouteEdgeId = null;
+    selectedRouteEdgeId = null;
+    previewRoutePath = null;
+    activeTool = 'route:point';
+    recordChange(before);
+    renderAll();
+    setNotice('Участок записан в карту. Нажмите «Сохранить», чтобы посетитель увидел маршрут.');
+  }
+
+  function editRouteSegment(id) {
+    const floor = currentFloor();
+    const edge = floor.routeEdges.find((entry) => entry.id === id);
+    if (!edge) return;
+    const first = floor.routeNodes.find((node) => node.id === edge.fromNodeId);
+    const last = floor.routeNodes.find((node) => node.id === edge.toNodeId);
+    if (!first?.placeId || !last?.placeId) return setNotice('Этот участок нельзя редактировать без привязанных точек.', 'error');
+    editingRouteEdgeId = edge.id;
+    selectedRouteEdgeId = null;
+    previewRoutePath = null;
+    routeFromId = first.placeId;
+    routeToId = last.placeId;
+    routeWaypoints = edge.points.map((point) => ({ ...point }));
+    activeTool = 'route:point';
+    renderAll();
+    setNotice('Измените изгибы на плане или в списке. Затем нажмите «Сохранить участок» и «Сохранить».');
   }
 
   function updateHeader() {
@@ -773,10 +968,13 @@ export function mountConstructor(container) {
     status.textContent = isSaving ? 'Сохраняю…' : notice || (isDirty ? 'Есть несохранённые изменения' : 'Сохранено');
     status.dataset.kind = noticeKind;
     const save = container.querySelector('[data-action="save"]');
-    save.disabled = isSaving || backgroundEditing || !isDirty;
+    const routeDraft = Boolean(editingRouteEdgeId || routeWaypoints.length);
+    save.disabled = isSaving || backgroundEditing || !isDirty || routeDraft;
+    save.title = routeDraft ? 'Сначала сохраните участок или уберите точки изгиба' : 'Сохранить площадку';
     const share = container.querySelector('[data-action="share"]');
-    share.disabled = true;
-    share.title = 'Просмотр карты ещё подключается';
+    share.disabled = isSaving || backgroundEditing || isDirty || routeDraft;
+    share.title = routeDraft ? 'Сначала закончите правку участка' : isDirty ? 'Сначала сохраните изменения' : 'Ссылка на карту посетителя';
+    container.querySelector('.constructor-share-note').textContent = routeDraft ? 'Закончите правку участка' : isDirty ? 'Сначала сохраните изменения' : 'Откройте карту посетителя';
     const undo = container.querySelector('[data-action="undo"]');
     const redo = container.querySelector('[data-action="redo"]');
     undo.disabled = isSaving || undoStack.length === 0;
@@ -799,6 +997,8 @@ export function mountConstructor(container) {
   }
 
   function recordChange(before) {
+    syncRouteNodes();
+    previewRoutePath = null;
     const after = snapshot();
     if (before === after) return;
     undoStack.push(before);
@@ -842,6 +1042,8 @@ export function mountConstructor(container) {
     if (field === 'name') item.name = value.slice(0, 120);
     if (field === 'category') item.category = value.slice(0, 80);
     if (field === 'description') item.description = value.slice(0, 2000);
+    if (field === 'wifiLogin' && item.type === 'wifi') item.wifiLogin = value.slice(0, 120);
+    if (field === 'wifiPassword' && item.type === 'wifi') item.wifiPassword = value.slice(0, 120);
     if (['x', 'y'].includes(field)) {
       const parsed = Number(value);
       if (Number.isFinite(parsed)) item[field] = Math.min(1, Math.max(0, parsed));
@@ -879,10 +1081,22 @@ export function mountConstructor(container) {
     if (isSaving || !selected) return;
     const before = captureSnapshot();
     const floor = currentFloor();
+    const removedTargetId = selected.kind === 'place'
+      || (selected.kind === 'element' && floor.plan.elements.some((item) => item.id === selected.id && ['zone', 'stand', 'stage'].includes(item.type)))
+      ? selected.id : null;
     if (selected.kind === 'element') {
       floor.plan.elements = floor.plan.elements.filter((item) => item.id !== selected.id);
     } else {
       floor.places = floor.places.filter((item) => item.id !== selected.id);
+    }
+    if (removedTargetId) {
+      const removed = new Set(floor.routeNodes.filter((node) => node.placeId === removedTargetId).map((node) => node.id));
+      floor.routeNodes = floor.routeNodes.filter((node) => !removed.has(node.id));
+      floor.routeEdges = floor.routeEdges.filter((edge) => !removed.has(edge.fromNodeId) && !removed.has(edge.toNodeId));
+      if (routeFromId === removedTargetId) routeFromId = '';
+      if (routeToId === removedTargetId) routeToId = '';
+      routeWaypoints = [];
+      editingRouteEdgeId = null;
     }
     selected = null;
     recordChange(before);
@@ -1009,7 +1223,27 @@ export function mountConstructor(container) {
       pointerAction = {
         type: 'pan', pointerId: event.pointerId, start: screenPoint, startX: view.x, startY: view.y,
       };
-      container.setPointerCapture(event.pointerId);
+      svg.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    if (activeTool === 'route:point') {
+      const marker = event.target.closest('[data-waypoint-index]');
+      if (marker) {
+        const index = Number(marker.dataset.waypointIndex);
+        pointerAction = {
+          type: 'route-waypoint', pointerId: event.pointerId, index,
+          original: { ...routeWaypoints[index] },
+        };
+        svg.setPointerCapture(event.pointerId);
+        return;
+      }
+      if (routeWaypoints.length >= 60) return setNotice('Для одного участка достаточно 60 точек.', 'error');
+      routeWaypoints.push({ x: clamp(point.x / PLAN_WIDTH, 0, 1), y: clamp(point.y / PLAN_HEIGHT, 0, 1) });
+      previewRoutePath = null;
+      renderRoutePanel();
+      renderCanvas();
+      updateHeader();
       return;
     }
 
@@ -1033,6 +1267,7 @@ export function mountConstructor(container) {
           x: clamp(point.x / PLAN_WIDTH, 0, 1),
           y: clamp(point.y / PLAN_HEIGHT, 0, 1),
         };
+        if (type === 'wifi') { item.wifiLogin = ''; item.wifiPassword = ''; }
         currentFloor().places.push(item);
         selected = { kind: 'place', id: item.id };
       }
@@ -1122,6 +1357,16 @@ export function mountConstructor(container) {
   function handlePointerMove(event) {
     const action = pointerAction;
     if (!action || action.pointerId !== event.pointerId || isSaving) return;
+    if (action.type === 'route-waypoint') {
+      const point = pointInElement(event);
+      if (!point || !routeWaypoints[action.index]) return;
+      routeWaypoints[action.index] = {
+        x: clamp(point.x / PLAN_WIDTH, 0, 1), y: clamp(point.y / PLAN_HEIGHT, 0, 1),
+      };
+      previewRoutePath = null;
+      renderCanvas();
+      return;
+    }
     if (action.type === 'background-move' || action.type === 'background-resize') {
       const point = pointInElement(event);
       if (!point) return;
@@ -1216,6 +1461,7 @@ export function mountConstructor(container) {
     const action = pointerAction;
     if (!action || action.pointerId !== event.pointerId) return;
     pointerAction = null;
+    if (action.type === 'route-waypoint') { renderRoutePanel(); return; }
     if (action.type === 'background-move' || action.type === 'background-resize') return;
     if (action.type !== 'pan' && action.moved) {
       recordChange(action.before);
@@ -1226,6 +1472,13 @@ export function mountConstructor(container) {
   function handlePointerCancel(event) {
     if (!pointerAction || pointerAction.pointerId !== event.pointerId) return;
     const action = pointerAction;
+    if (action.type === 'route-waypoint') {
+      pointerAction = null;
+      routeWaypoints[action.index] = action.original;
+      renderRoutePanel();
+      renderCanvas();
+      return;
+    }
     if (action.type === 'background-move' || action.type === 'background-resize') {
       finishBackgroundAdjustment(false);
       return;
@@ -1262,6 +1515,11 @@ export function mountConstructor(container) {
 
   async function saveVenue() {
     if (!venue || isSaving || backgroundEditing) return false;
+    if (editingRouteEdgeId || routeWaypoints.length) {
+      setNotice('Сначала нажмите «Сохранить участок» или уберите точки изгиба.', 'error');
+      return false;
+    }
+    syncRouteNodes();
     if (!isDirty) return true;
     isSaving = true;
     notice = '';
@@ -1423,7 +1681,9 @@ export function mountConstructor(container) {
     activeTool = tool;
     container.classList.toggle('is-hand', activeTool === 'hand' || temporaryHand);
     renderToolPanel();
+    renderRoutePanel();
     container.querySelector('[data-role="mode-label"]').textContent = toolLabel(tool);
+    if (tool === 'hand') setNotice('Сначала увеличьте план кнопкой «+», затем удерживайте и перетаскивайте его. Стрелки рядом с масштабом тоже сдвигают вид.');
   }
 
   async function handleAction(action, button) {
@@ -1432,10 +1692,69 @@ export function mountConstructor(container) {
     if (action.startsWith('tool:')) return chooseTool(action.slice('tool:'.length));
     if (action === 'tab') {
       activeTab = button.dataset.tab;
+      activeTool = 'select';
       for (const tab of container.querySelectorAll('[data-action="tab"]')) {
         tab.setAttribute('aria-selected', String(tab.dataset.tab === activeTab));
       }
-      renderToolPanel();
+      renderAll();
+      return;
+    }
+    if (action === 'route-check') {
+      const targets = navigationTargets(currentFloor());
+      const from = targets.find((target) => target.id === routeFromId);
+      const to = targets.find((target) => target.id === routeToId);
+      if (!from || !to) return setNotice('Выберите начало и конец пути.', 'error');
+      previewRoutePath = plannedRoute(currentFloor(), from, to);
+      renderCanvas();
+      setNotice(previewRoutePath
+        ? 'Синий путь учитывает стены и сцену. Участки сети отображаются только по запросу.'
+        : 'Проход не найден: препятствия разделяют эти точки.', previewRoutePath ? 'info' : 'error');
+      return;
+    }
+    if (action === 'route-toggle-network') {
+      showRouteNetwork = !showRouteNetwork;
+      renderRoutePanel();
+      renderCanvas();
+      return;
+    }
+    if (action === 'route-show-edge') {
+      selectedRouteEdgeId = selectedRouteEdgeId === button.dataset.id ? null : button.dataset.id;
+      renderCanvas();
+      return;
+    }
+    if (action === 'route-add') return addRouteSegment();
+    if (action === 'route-edit') return editRouteSegment(button.dataset.id);
+    if (action === 'route-cancel-edit') {
+      editingRouteEdgeId = null;
+      routeWaypoints = [];
+      previewRoutePath = null;
+      renderAll();
+      return;
+    }
+    if (action === 'route-remove-point') {
+      routeWaypoints.splice(Number(button.dataset.index), 1);
+      previewRoutePath = null;
+      renderRoutePanel();
+      renderCanvas();
+      updateHeader();
+      return;
+    }
+    if (action === 'route-undo-point') {
+      routeWaypoints.pop();
+      previewRoutePath = null;
+      renderRoutePanel();
+      renderCanvas();
+      updateHeader();
+      return;
+    }
+    if (action === 'route-delete') {
+      const before = captureSnapshot();
+      const floor = currentFloor();
+      floor.routeEdges = floor.routeEdges.filter((edge) => edge.id !== button.dataset.id);
+      if (editingRouteEdgeId === button.dataset.id) { editingRouteEdgeId = null; routeWaypoints = []; }
+      if (selectedRouteEdgeId === button.dataset.id) selectedRouteEdgeId = null;
+      recordChange(before);
+      renderAll();
       return;
     }
     if (action === 'save') return saveVenue();
@@ -1446,7 +1765,12 @@ export function mountConstructor(container) {
       } catch (error) { setNotice(error.message, 'error'); }
       return;
     }
-    if (action === 'share') return;
+    if (action === 'share') {
+      if (isDirty) return setNotice('Сначала сохраните изменения.', 'error');
+      const link = `${window.location.origin}/map/${encodeURIComponent(venue.id)}`;
+      window.prompt('Скопируйте ссылку для посетителя:', link);
+      return;
+    }
     if (action === 'undo') return undo();
     if (action === 'redo') return redo();
     if (action === 'delete') return deleteSelected();
@@ -1455,6 +1779,12 @@ export function mountConstructor(container) {
     if (action === 'zoom-in') return zoom(1.2);
     if (action === 'zoom-out') return zoom(1 / 1.2);
     if (action === 'fit') return fitPlan();
+    if (action.startsWith('pan-')) {
+      const moves = { 'pan-left': [-80, 0], 'pan-right': [80, 0], 'pan-up': [0, -80], 'pan-down': [0, 80] };
+      const delta = moves[action];
+      if (delta) { view.x += delta[0]; view.y += delta[1]; updateWorldTransform(); }
+      return;
+    }
     if (action === 'background-configure') return beginBackgroundAdjustment();
     if (action === 'background-fit') return fitBackgroundToPlan();
     if (action === 'background-commit') return finishBackgroundAdjustment(true);
@@ -1578,6 +1908,29 @@ export function mountConstructor(container) {
   container.addEventListener('input', handleBackgroundOpacityInput);
   container.addEventListener('change', handleBackgroundOpacityChange);
   container.addEventListener('change', handleBackgroundFileChange);
+  container.addEventListener('toggle', (event) => {
+    if (event.target.matches('[data-help]')) helpOpen = event.target.open;
+  }, true);
+  container.addEventListener('change', (event) => {
+    if (event.target.matches('[data-waypoint-coordinate]')) {
+      const index = Number(event.target.dataset.index);
+      const coordinate = event.target.dataset.waypointCoordinate;
+      const value = Number(event.target.value);
+      if (routeWaypoints[index] && ['x', 'y'].includes(coordinate) && Number.isFinite(value)) {
+        routeWaypoints[index][coordinate] = clamp(value / 100, 0, 1);
+      }
+      previewRoutePath = null;
+      renderRoutePanel();
+      renderCanvas();
+      updateHeader();
+      return;
+    }
+    if (event.target.matches('[data-route-from]')) routeFromId = event.target.value;
+    else if (event.target.matches('[data-route-to]')) routeToId = event.target.value;
+    else return;
+    previewRoutePath = null;
+    renderCanvas();
+  });
   container.addEventListener('submit', handleSubmit);
   window.addEventListener('keydown', handleKeyDown);
   window.addEventListener('keyup', handleKeyUp);

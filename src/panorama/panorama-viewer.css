@@ -1,0 +1,10 @@
+.panorama-overlay { position: fixed; z-index: 10000; inset: 0; display: grid; grid-template-rows: auto 1fr;
+  background: #111b27; color: white; font: 16px/1.4 system-ui, sans-serif; }
+.panorama-overlay__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px; min-height: 60px; padding: 8px 14px; background: #132f3c; }
+.panorama-overlay__bar button { min-height: 44px; padding: 8px 12px; border: 1px solid #91b8bc;
+  border-radius: 9px; background: #224c59; color: white; font: inherit; cursor: pointer; }
+.panorama-overlay__viewer { min-height: 0; }
+.panorama-overlay__info { position: absolute; left: 12px; right: 12px; bottom: 18px; max-width: 600px;
+  margin: 0 auto; padding: 12px; border-radius: 10px; background: #102a39ed; color: white; }
+@media (max-width: 600px) { .panorama-overlay__bar strong { width: 100%; order: -1; text-align: center; } }
