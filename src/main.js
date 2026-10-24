@@ -31,14 +31,28 @@ if (path === '/constructor') {
     if (id) window.location.assign(`/map/${encodeURIComponent(id)}`);
   });
 } else if (path === '/') {
+  document.body.classList.add('home-page');
   root.innerHTML = `
-    <div class="eyebrow">Площадка начинается с понятного пути</div>
-    <h1>Осмотритесь.<br>Найдите своё место.</h1>
-    <p class="intro">План помещений, интересные места и панорамы — в одной карте.</p>
-    <div class="choices">
-      <a class="choice" href="/map"><span class="number">01</span><h2>Посетителю</h2><p>Открыть карту площадки</p><span class="arrow" aria-hidden="true">↗</span></a>
-      <a class="choice" href="/constructor"><span class="number">02</span><h2>Организатору</h2><p>Перейти к управлению картой</p><span class="arrow" aria-hidden="true">↗</span></a>
-    </div>`;
+    <section class="home-hero" aria-labelledby="home-title">
+      <div class="home-event"><span>Хакатон Осень 2026</span><span>23–25 октября</span></div>
+      <div class="home-hero__content">
+        <div class="home-copy">
+          <p class="home-eyebrow">Карта пространства</p>
+          <h1 id="home-title">Манеж рядом.<br><em>Путь понятен.</em></h1>
+          <p>Найдите регистрацию, зону участников и нужное место на плане манежа. Откройте карту прямо на телефоне.</p>
+          <div class="home-venue"><span class="home-venue__icon" aria-hidden="true">⌖</span><span><strong>Манеж ДГТУ</strong><small>Ростов-на-Дону · Юфимцева, 16</small></span></div>
+        </div>
+        <div class="home-actions">
+          <a class="home-map-link" href="/map" aria-label="Для посетителя: открыть карту площадки">
+            <span class="home-map-link__dots" aria-hidden="true">•••</span>
+            <span class="home-map-link__label" aria-hidden="true">КАРТА / МАНЕЖ</span>
+            <svg class="home-map-link__route" viewBox="0 0 280 190" aria-hidden="true"><path d="M40 145 C65 100 135 155 145 83 S205 100 245 42"/><circle cx="40" cy="145" r="10"/><circle cx="245" cy="42" r="10"/></svg>
+            <strong>Для<br>посетителя ↗</strong><small>Открыть карту площадки</small>
+          </a>
+          <a class="home-organizer-link" href="/constructor">Для организатора ↗</a>
+        </div>
+      </div>
+    </section>`;
 } else {
   root.innerHTML = '<h1>Страница не найдена</h1><a href="/">На главную</a>';
 }

@@ -152,10 +152,11 @@ const placeTypes = {
   registration: 'Регистрация',
   service: 'Сервисная точка',
   wifi: 'Wi-Fi',
+  wc: 'WC',
 };
 
 const availableElementTools = ['zone', 'stand', 'stage', 'partition'];
-const availablePlaceTools = ['entrance', 'registration', 'wifi'];
+const availablePlaceTools = ['entrance', 'registration', 'wifi', 'wc'];
 
 const handleCorners = {
   nw: [-1, -1],
@@ -187,12 +188,25 @@ function rotateVector(x, y, degrees) {
   return { x: x * cosine - y * sine, y: x * sine + y * cosine };
 }
 
+export function initialVenueId(search, rememberedId = '') {
+  const params = new URLSearchParams(search);
+  if (params.has('new')) return '';
+  return params.get('venue') || rememberedId;
+}
+
 export function mountConstructor(container) {
   document.body.classList.add('constructor-page');
 
   const query = new URLSearchParams(window.location.search);
-  let venueId = query.get('venue') || '';
+  let rememberedId = '';
+  try { rememberedId = window.localStorage.getItem('space-map-last-venue') || ''; } catch { /* Storage may be disabled. */ }
+  let venueId = initialVenueId(window.location.search, rememberedId);
+  if (venueId && !query.has('venue')) {
+    window.history.replaceState(null, '', `/constructor?venue=${encodeURIComponent(venueId)}`);
+  }
   let organizerKey = '';
+  const keyStore = `space-map-organizer-key:${venueId}`;
+  try { organizerKey = window.sessionStorage.getItem(keyStore) || ''; } catch { /* Session storage may be disabled. */ }
   let needsOrganizerKey = false;
   let retryAfterOrganizerKey = null;
   let pendingBackgroundFile = null;
@@ -327,7 +341,8 @@ export function mountConstructor(container) {
   function currentSelection() {
     const floor = currentFloor();
     if (!floor || !selected) return null;
-    const collection = selected.kind === 'element' ? floor.plan.elements : floor.places;
+    const collection = selected.kind === 'element' ? floor.plan.elements
+      : selected.kind === 'panorama' ? floor.panoramaPoints : floor.places;
     const item = collection.find((entry) => entry.id === selected.id);
     return item ? { item, collection } : null;
   }
@@ -386,6 +401,7 @@ export function mountConstructor(container) {
             : `<label>Название площадки<input name="name" maxlength="120" required autofocus placeholder="Например, Манеж ДГТУ"></label>`}
           <label>Ключ доступа организатора<input name="key" type="password" autocomplete="off" required></label>
           <button class="constructor-primary" type="submit">${isOpening ? 'Загрузить площадку' : 'Создать площадку'}</button>
+          ${isOpening ? '<a href="/constructor?new=1">Создать новую площадку</a>' : ''}
           <p class="constructor-access__hint" data-role="access-status" role="status" aria-live="polite">${isOpening
             ? 'Введите ключ. Сервер проверит его при сохранении, без пробного запроса на запись.'
             : 'Ключ проверяется настоящим запросом создания. Он не сохраняется браузером.'}</p>
@@ -418,6 +434,8 @@ export function mountConstructor(container) {
     try {
       if (venueId) {
         venue = await requestJson(`/api/venues/${encodeURIComponent(venueId)}`);
+        try { window.localStorage.setItem('space-map-last-venue', venue.id); } catch { /* Storage may be disabled. */ }
+        try { window.sessionStorage.setItem(keyStore, organizerKey); } catch { /* Session storage may be disabled. */ }
         savedSnapshot = snapshot();
         undoStack.length = 0;
         redoStack.length = 0;
@@ -432,7 +450,9 @@ export function mountConstructor(container) {
           body: JSON.stringify({ name }),
         }, true);
         venueId = venue.id;
+        try { window.sessionStorage.setItem(`space-map-organizer-key:${venueId}`, organizerKey); } catch { /* Session storage may be disabled. */ }
         window.history.replaceState(null, '', `/constructor?venue=${encodeURIComponent(venueId)}`);
+        try { window.localStorage.setItem('space-map-last-venue', venueId); } catch { /* Storage may be disabled. */ }
         savedSnapshot = snapshot();
         undoStack.length = 0;
         redoStack.length = 0;
@@ -442,6 +462,7 @@ export function mountConstructor(container) {
       }
     } catch (error) {
       organizerKey = '';
+      try { window.sessionStorage.removeItem(keyStore); } catch { /* Session storage may be disabled. */ }
       submit.disabled = false;
       status.textContent = error.message;
       status.dataset.kind = 'error';
@@ -469,6 +490,8 @@ export function mountConstructor(container) {
         ['select', 'Выбор'], ['hand', 'Сдвиг карты'],
         ...availableElementTools.map((key) => [`element:${key}`, elementTypes[key]]),
       ]
+      : activeTab === 'panoramas'
+      ? [['select', 'Выбор'], ['hand', 'Сдвиг карты']]
       : [
         ['select', 'Выбор'], ['hand', 'Сдвиг карты'],
         ...availablePlaceTools.map((key) => [`place:${key}`, placeTypes[key]]),
@@ -476,12 +499,17 @@ export function mountConstructor(container) {
     for (const [tool, label] of tools) {
       panel.append(makeButton(label, `tool:${tool}`, { selected: activeTool === tool }));
     }
+    const panoramaActions = container.querySelector('[data-role="panorama-actions"]');
+    panoramaActions.hidden = activeTab !== 'panoramas';
+    panoramaActions.querySelector('[data-action="capture-selected"]').disabled = selected?.kind !== 'panorama';
+    panoramaActions.querySelector('[data-action="tool:panorama"]').setAttribute('aria-pressed', String(activeTool === 'panorama'));
   }
 
   function toolLabel(tool) {
     if (tool === 'select') return 'Выбор';
     if (tool === 'hand') return 'Сдвиг карты';
     if (tool === 'route:point') return 'Поставьте точки вдоль прохода';
+    if (tool === 'panorama') return 'Точка панорамы';
     const type = tool.startsWith('element:') ? tool.slice(8) : tool.slice(6);
     return elementTypes[type] ?? placeTypes[type] ?? 'Размещение';
   }
@@ -507,7 +535,7 @@ export function mountConstructor(container) {
       const title = document.createElement('span');
       title.textContent = item.name;
       const meta = document.createElement('small');
-      meta.textContent = `${labelMap[item.type]} · ${item.id.slice(0, 8)}`;
+      meta.textContent = `${kind === 'panorama' ? ((item.imageUrl || item.imageId) ? 'Снимок готов' : 'Ждёт съёмки') : labelMap[item.type]} · ${item.id.slice(0, 8)}`;
       button.append(title, meta);
       list.append(button);
     }
@@ -523,12 +551,18 @@ export function mountConstructor(container) {
 
     const { item } = match;
     const isElement = selected.kind === 'element';
+    const isPanorama = selected.kind === 'panorama';
     const labelMap = isElement ? elementTypes : placeTypes;
     const fields = [
-      `<label>Тип<input value="${escapeHtml(labelMap[item.type])}" disabled></label>`,
+      `<label>Тип<input value="${isPanorama ? 'Точка панорамы' : escapeHtml(labelMap[item.type])}" disabled></label>`,
       `<label>Название<input data-property="name" maxlength="120" value="${escapeHtml(item.name)}"></label>`,
     ];
-    if (!isElement) {
+    if (isPanorama) {
+      fields.push(`<p class="constructor-panorama-status">${item.imageUrl || item.imageId ? 'Панорама готова и доступна посетителю.' : 'Изображения пока нет. Сначала сохраните точку, затем снимите серию кадров.'}</p>`);
+      fields.push('<label>Загрузить готовую панораму JPEG<input data-role="panorama-file" type="file" accept="image/jpeg,.jpg,.jpeg"></label>');
+      fields.push('<button type="button" class="constructor-primary" data-action="capture-selected">Снять и собрать кадры</button>');
+      if (item.imageUrl || item.imageId) fields.push('<button type="button" data-action="preview-panorama">Посмотреть панораму</button>');
+    } else if (!isElement) {
       if (item.type === 'wifi') {
         fields.push(`<label>Логин (название сети)<input data-property="wifiLogin" maxlength="120" value="${escapeHtml(item.wifiLogin ?? '')}" placeholder="Например: EventWiFi"></label>`);
         fields.push(`<label>Пароль<input data-property="wifiPassword" maxlength="120" value="${escapeHtml(item.wifiPassword ?? '')}" placeholder="Пароль для посетителей"></label>`);
@@ -538,6 +572,7 @@ export function mountConstructor(container) {
       }
     }
     if (isElement) {
+      fields.push(`<label>Цвет на плане<input data-property="color" type="color" value="${escapeHtml(item.color ?? '#aadbd1')}"></label>`);
       fields.push(`<button type="button" data-action="rotate">Повернуть на 90°</button>`);
     }
     fields.push('<div class="constructor-property-actions">');
@@ -609,6 +644,7 @@ export function mountConstructor(container) {
       }));
     }
     for (const item of floor.places) renderPlace(world, item);
+    for (const item of floor.panoramaPoints) renderPanoramaPoint(world, item);
     if (backgroundEditing && planBackground) renderBackgroundEditFrame(world, planBackground);
     else renderSelection(world);
   }
@@ -649,6 +685,7 @@ export function mountConstructor(container) {
       'data-entity-kind': 'element',
       'data-entity-id': item.id,
       transform: `rotate(${item.rotation} ${centerX} ${centerY})`,
+      ...(item.color ? { style: `--element-fill: ${item.color}` } : {}),
     });
     group.append(svgElement('rect', { x, y, width, height, rx: 4 }));
     const label = svgElement('text', { x: centerX, y: centerY, class: 'constructor-canvas-label' });
@@ -672,11 +709,28 @@ export function mountConstructor(container) {
     world.append(group);
   }
 
+  function renderPanoramaPoint(world, item) {
+    const x = item.x * PLAN_WIDTH;
+    const y = item.y * PLAN_HEIGHT;
+    const group = svgElement('g', {
+      class: `constructor-panorama-point${item.imageUrl || item.imageId ? ' constructor-panorama-point--ready' : ''}`,
+      'data-entity-kind': 'panorama', 'data-entity-id': item.id,
+    });
+    group.append(svgElement('circle', { cx: x, cy: y, r: 15 }));
+    const icon = svgElement('text', { x, y: y + 6, class: 'constructor-panorama-icon' });
+    icon.textContent = '◉';
+    group.append(icon);
+    const label = svgElement('text', { x: x + 20, y: y - 14, class: 'constructor-place-label' });
+    label.textContent = item.name;
+    group.append(label);
+    world.append(group);
+  }
+
   function renderSelection(world) {
     const match = currentSelection();
     if (!match) return;
     const { item } = match;
-    if (selected.kind === 'place') {
+    if (selected.kind === 'place' || selected.kind === 'panorama') {
       world.append(svgElement('circle', {
         class: 'constructor-place-selection',
         cx: item.x * PLAN_WIDTH,
@@ -727,6 +781,7 @@ export function mountConstructor(container) {
             <button type="button" class="constructor-primary" data-action="save">Сохранить</button>
             <button type="button" data-action="export">Выгрузить JSON</button>
             <button type="button" data-action="share">Ссылка на карту</button>
+            <a data-role="visitor-preview" href="/map/${encodeURIComponent(venue.id)}" target="_blank" rel="noopener">Просмотреть карту</a>
             <small class="constructor-share-note">${isDirty ? 'Сначала сохраните изменения' : 'Откройте карту посетителя'}</small>
             <button type="button" data-action="exit">Выйти</button>
           </div>
@@ -741,21 +796,26 @@ export function mountConstructor(container) {
               <button type="button" role="tab" aria-selected="${activeTab === 'objects'}" data-action="tab" data-tab="objects">Объекты</button>
               <button type="button" role="tab" aria-selected="${activeTab === 'places'}" data-action="tab" data-tab="places">Места</button>
               <button type="button" role="tab" aria-selected="${activeTab === 'routes'}" data-action="tab" data-tab="routes">Маршрут</button>
+              <button type="button" role="tab" aria-selected="${activeTab === 'panoramas'}" data-action="tab" data-tab="panoramas">Панорамы</button>
             </div>
             <details class="constructor-help" data-help ${helpOpen ? 'open' : ''}>
               <summary>Как работать с картой и маршрутами</summary>
               <ol>
                 <li>Загрузите подложку плана либо рисуйте на пустом плане. Во вкладке «Объекты» нарисуйте «Зону» как большую область, например рабочее пространство с множеством столов. Размер зоны можно менять за углы. «Стенд» и «Сцена» — объекты, к которым можно вести маршрут. «Стена» — препятствие без маршрута.</li>
-                <li>Во вкладке «Места» поставьте вход, регистрацию и при необходимости точку Wi-Fi. У неё заполните «Логин (название сети)» и «Пароль»: посетитель увидит их в карточке этой точки. Для пути в рабочую зону поставьте регистрацию у её доступного входа. Отдельные столы добавлять не нужно.</li>
+                <li>Во вкладке «Места» поставьте вход, регистрацию, WC и при необходимости точку Wi-Fi. Для панорамы выберите «Поставить панораму», нажмите на план, затем в свойствах точки — «Снять и собрать кадры». Изменения сохранятся перед переходом к съёмке.</li>
                 <li>Посетитель может начать и закончить маршрут в любой свободной точке плана. Без ручной разметки путь автоматически обходит стены, стенды и сцену, но рабочая зона остаётся проходимой. К сцене путь подходит со свободной стороны и заканчивается у края.</li>
                 <li>Маршруты строятся автоматически: организатору достаточно разместить препятствия и места. Во вкладке «Маршрут» проверьте несколько пар точек. Если нужен конкретный проход, можно необязательно добавить предпочтительный участок и отредактировать его изгибы.</li>
                 <li>Кнопка «Проверить путь» показывает один синий маршрут; сеть проходов скрыта по умолчанию и включается отдельно. Получите «Ссылку на карту» и проверьте путь как посетитель.</li>
               </ol>
               <p>«Сдвиг карты» перемещает только вид увеличенного плана. Для переноса объекта используйте «Выбор».</p>
             </details>
-            <p class="constructor-panel-heading">Инструменты</p>
+            <p class="constructor-panel-heading">${activeTab === 'panoramas' ? 'Панорамные точки' : 'Инструменты'}</p>
+            <div class="constructor-panorama-actions" data-role="panorama-actions" hidden>
+              <button type="button" data-action="tool:panorama">◉ Поставить панораму</button>
+              <button type="button" data-action="capture-selected" disabled>Снять выбранную</button>
+            </div>
             <div class="constructor-tools" data-role="tool-panel"></div>
-            <p class="constructor-tool-hint">${activeTab === 'routes' ? 'Выберите начало и конец и нажмите «Проверить путь». Рисовать линии не нужно.' : 'Выберите инструмент и щёлкните по плану, чтобы разместить объект.'}</p>
+            <p class="constructor-tool-hint">${activeTab === 'routes' ? 'Выберите начало и конец и нажмите «Проверить путь». Рисовать линии не нужно.' : activeTab === 'panoramas' ? 'Поставьте точку на плане. Выберите её, измените название в свойствах и нажмите «Снять и собрать кадры».' : 'Выберите инструмент и щёлкните по плану, чтобы разместить объект.'}</p>
             <section class="constructor-route-panel" data-role="route-panel" ${activeTab === 'routes' ? '' : 'hidden'}></section>
           </aside>
 
@@ -811,6 +871,8 @@ export function mountConstructor(container) {
               <div data-role="element-list" class="constructor-list"></div>
               <h3>Места</h3>
               <div data-role="place-list" class="constructor-list"></div>
+              <h3>Панорамы</h3>
+              <div data-role="panorama-list" class="constructor-list"></div>
             </section>
           </aside>
         </div>
@@ -835,6 +897,7 @@ export function mountConstructor(container) {
     renderProperties();
     renderList('[data-role="element-list"]', 'element', elementTypes, floor.plan.elements);
     renderList('[data-role="place-list"]', 'place', placeTypes, floor.places);
+    renderList('[data-role="panorama-list"]', 'panorama', {}, floor.panoramaPoints);
     renderRoutePanel();
   }
 
@@ -974,6 +1037,9 @@ export function mountConstructor(container) {
     const share = container.querySelector('[data-action="share"]');
     share.disabled = isSaving || backgroundEditing || isDirty || routeDraft;
     share.title = routeDraft ? 'Сначала закончите правку участка' : isDirty ? 'Сначала сохраните изменения' : 'Ссылка на карту посетителя';
+    const visitorPreview = container.querySelector('[data-role="visitor-preview"]');
+    visitorPreview.setAttribute('aria-disabled', String(isDirty || routeDraft || isSaving));
+    visitorPreview.tabIndex = isDirty || routeDraft || isSaving ? -1 : 0;
     container.querySelector('.constructor-share-note').textContent = routeDraft ? 'Закончите правку участка' : isDirty ? 'Сначала сохраните изменения' : 'Откройте карту посетителя';
     const undo = container.querySelector('[data-action="undo"]');
     const redo = container.querySelector('[data-action="redo"]');
@@ -1044,6 +1110,7 @@ export function mountConstructor(container) {
     if (field === 'description') item.description = value.slice(0, 2000);
     if (field === 'wifiLogin' && item.type === 'wifi') item.wifiLogin = value.slice(0, 120);
     if (field === 'wifiPassword' && item.type === 'wifi') item.wifiPassword = value.slice(0, 120);
+    if (field === 'color' && selected?.kind === 'element' && /^#[0-9a-fA-F]{6}$/.test(value)) item.color = value;
     if (['x', 'y'].includes(field)) {
       const parsed = Number(value);
       if (Number.isFinite(parsed)) item[field] = Math.min(1, Math.max(0, parsed));
@@ -1069,7 +1136,8 @@ export function mountConstructor(container) {
   function findEntity(kind, id) {
     const floor = currentFloor();
     if (!floor) return null;
-    return (kind === 'element' ? floor.plan.elements : floor.places).find((item) => item.id === id) ?? null;
+    return (kind === 'element' ? floor.plan.elements : kind === 'panorama' ? floor.panoramaPoints : floor.places)
+      .find((item) => item.id === id) ?? null;
   }
 
   function setSelection(kind, id) {
@@ -1086,6 +1154,8 @@ export function mountConstructor(container) {
       ? selected.id : null;
     if (selected.kind === 'element') {
       floor.plan.elements = floor.plan.elements.filter((item) => item.id !== selected.id);
+    } else if (selected.kind === 'panorama') {
+      floor.panoramaPoints = floor.panoramaPoints.filter((item) => item.id !== selected.id);
     } else {
       floor.places = floor.places.filter((item) => item.id !== selected.id);
     }
@@ -1116,6 +1186,16 @@ export function mountConstructor(container) {
       const centerY = duplicate.y * PLAN_HEIGHT + height / 2 + 24;
       setElementGeometry(duplicate, centerX, centerY, width, height, duplicate.rotation);
       currentFloor().plan.elements.push(duplicate);
+    } else if (selected.kind === 'panorama') {
+      delete duplicate.imageUrl;
+      delete duplicate.imageId;
+      delete duplicate.placeId;
+      delete duplicate.haov;
+      delete duplicate.vaov;
+      duplicate.name = `${duplicate.name} — копия`.slice(0, 120);
+      duplicate.x = Math.min(1, duplicate.x + 0.03);
+      duplicate.y = Math.min(1, duplicate.y + 0.03);
+      currentFloor().panoramaPoints.push(duplicate);
     } else {
       duplicate.x = Math.min(1, duplicate.x + 0.03);
       duplicate.y = Math.min(1, duplicate.y + 0.03);
@@ -1247,9 +1327,16 @@ export function mountConstructor(container) {
       return;
     }
 
-    if (activeTool.startsWith('element:') || activeTool.startsWith('place:')) {
+    if (activeTool === 'panorama' || activeTool.startsWith('element:') || activeTool.startsWith('place:')) {
       const before = captureSnapshot();
-      if (activeTool.startsWith('element:')) {
+      if (activeTool === 'panorama') {
+        const item = {
+          id: createId(), name: `Панорама ${currentFloor().panoramaPoints.length + 1}`,
+          x: clamp(point.x / PLAN_WIDTH, 0, 1), y: clamp(point.y / PLAN_HEIGHT, 0, 1),
+        };
+        currentFloor().panoramaPoints.push(item);
+        selected = { kind: 'panorama', id: item.id };
+      } else if (activeTool.startsWith('element:')) {
         const type = activeTool.slice('element:'.length);
         const width = 170;
         const height = 100;
@@ -1419,7 +1506,7 @@ export function mountConstructor(container) {
     if (action.type === 'move') {
       const item = findEntity(action.kind, action.id);
       if (!item) return;
-      if (action.kind === 'place') {
+      if (action.kind === 'place' || action.kind === 'panorama') {
         item.x = clamp(action.startX + (point.x - action.start.x) / PLAN_WIDTH, 0, 1);
         item.y = clamp(action.startY + (point.y - action.start.y) / PLAN_HEIGHT, 0, 1);
       } else {
@@ -1628,6 +1715,45 @@ export function mountConstructor(container) {
     }
   }
 
+  async function uploadPanorama(file, pointId) {
+    if (!file || !pointId || !venue || isSaving || backgroundEditing) return;
+    if (file.type !== 'image/jpeg' || file.size > 10 * 1024 * 1024) {
+      setNotice('Для панорамы нужен JPEG размером до 10 МБ.', 'error');
+      return;
+    }
+    if (isDirty && !await saveVenue()) return;
+    const floor = currentFloor();
+    if (!floor.panoramaPoints.some((point) => point.id === pointId)) return;
+    isSaving = true;
+    notice = '';
+    renderAll();
+    try {
+      const saved = await requestJson(`/api/venues/${encodeURIComponent(venue.id)}/floors/${encodeURIComponent(floor.id)}/panoramas/${encodeURIComponent(pointId)}/image`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/jpeg', 'If-Match': `"${venue.revision}"` },
+        body: file,
+      }, true);
+      venue = saved;
+      savedSnapshot = snapshot();
+      undoStack.length = 0;
+      redoStack.length = 0;
+      refreshDirty();
+      notice = 'Панорама сохранена на сервере и привязана к точке.';
+      noticeKind = 'success';
+    } catch (error) {
+      if (error.status === 401) {
+        organizerKey = '';
+        needsOrganizerKey = true;
+        retryAfterOrganizerKey = () => uploadPanorama(file, pointId);
+      }
+      notice = `Панорама не загружена: ${error.message}. Точка и прежний файл сохранены.`;
+      noticeKind = 'error';
+    } finally {
+      isSaving = false;
+      renderAll();
+    }
+  }
+
   async function deleteBackground() {
     const floor = currentFloor();
     if (!floor?.plan.background || isSaving || backgroundEditing) return;
@@ -1758,6 +1884,26 @@ export function mountConstructor(container) {
       return;
     }
     if (action === 'save') return saveVenue();
+    if (action === 'capture-selected') {
+      const point = selected?.kind === 'panorama' && findEntity('panorama', selected.id);
+      if (!point) return setNotice('Сначала выберите точку панорамы на плане или в списке.', 'error');
+      if (!(await saveVenue())) return;
+      window.location.assign(`/panorama-capture?venue=${encodeURIComponent(venue.id)}&floor=${encodeURIComponent(currentFloor().id)}&point=${encodeURIComponent(point.id)}`);
+      return;
+    }
+    if (action === 'preview-panorama') {
+      const point = selected?.kind === 'panorama' && findEntity('panorama', selected.id);
+      if (!point || !(point.imageUrl || point.imageId)) return setNotice('Для этой точки пока нет готовой панорамы.', 'error');
+      const { openPanorama } = await import('../panorama/panorama-viewer.js');
+      const floor = currentFloor();
+      const scenes = floor.panoramaPoints.map((entry) => ({ ...entry,
+        imageUrl: entry.imageUrl ?? (entry.imageId
+          ? `/api/venues/${encodeURIComponent(venue.id)}/floors/${encodeURIComponent(floor.id)}/panoramas/${encodeURIComponent(entry.id)}/image`
+          : undefined),
+      }));
+      await openPanorama(container, scenes, point.id, floor.places);
+      return;
+    }
     if (action === 'export') {
       try {
         await downloadVenueBackup(venue, venue.id, venue.revision);
@@ -1795,7 +1941,8 @@ export function mountConstructor(container) {
     if (action === 'exit') {
       if (isDirty && !window.confirm('Есть несохранённые изменения. Выйти без сохранения?')) return;
       organizerKey = '';
-      window.location.assign('/constructor');
+      try { window.sessionStorage.removeItem(keyStore); } catch { /* Session storage may be disabled. */ }
+      window.location.assign(`/constructor?venue=${encodeURIComponent(venue.id)}`);
     }
   }
 
@@ -1908,6 +2055,11 @@ export function mountConstructor(container) {
   container.addEventListener('input', handleBackgroundOpacityInput);
   container.addEventListener('change', handleBackgroundOpacityChange);
   container.addEventListener('change', handleBackgroundFileChange);
+  container.addEventListener('change', (event) => {
+    if (event.target.matches('[data-role="panorama-file"]')) {
+      uploadPanorama(event.target.files?.[0], selected?.kind === 'panorama' ? selected.id : null);
+    }
+  });
   container.addEventListener('toggle', (event) => {
     if (event.target.matches('[data-help]')) helpOpen = event.target.open;
   }, true);
@@ -1944,8 +2096,13 @@ export function mountConstructor(container) {
     event.returnValue = '';
   });
 
-  if (venueId) renderAccessScreen();
-  else renderAccessScreen();
+  if (venueId && organizerKey) {
+    requestJson(`/api/venues/${encodeURIComponent(venueId)}`).then((loaded) => {
+      venue = loaded;
+      savedSnapshot = snapshot();
+      renderConstructor();
+    }).catch(() => renderAccessScreen());
+  } else renderAccessScreen();
 
   return function unmountConstructor() {
     organizerKey = '';

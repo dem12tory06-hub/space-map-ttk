@@ -21,7 +21,7 @@ export function navigationTargets(floor) {
 export function navigationLabel(target) {
   return {
     zone: 'Зона', stand: 'Стенд', stage: 'Сцена',
-    entrance: 'Вход', registration: 'Регистрация', wifi: 'Wi-Fi', service: 'Место',
+    entrance: 'Вход', registration: 'Регистрация', wifi: 'Wi-Fi', wc: 'WC', service: 'Место',
   }[target.type] ?? 'Место';
 }
 

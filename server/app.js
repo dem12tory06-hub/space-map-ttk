@@ -1,8 +1,9 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { VenueStoreError } from './venue-store.js';
+import { handlePanoramaRequest } from './panorama-integration.js';
 
 const maxRequestBytes = 1024 * 1024;
 const maxBackgroundBytes = 10 * 1024 * 1024;
@@ -13,6 +14,7 @@ const pages = new Map([
   ['/', indexFile],
   ['/map', indexFile],
   ['/constructor', indexFile],
+  ['/panorama-capture', new URL('./panorama-capture.html', import.meta.url)],
   ['/test/venue', new URL('../test/venue-test.html', import.meta.url)],
 ]);
 const assets = new Map([
@@ -25,6 +27,7 @@ const assets = new Map([
   ['/src/panorama/panorama-viewer.js', [new URL('../src/panorama/panorama-viewer.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/src/panorama/panorama-viewer.css', [new URL('../src/panorama/panorama-viewer.css', import.meta.url), 'text/css; charset=utf-8']],
   ['/src/shared/navigation-targets.js', [new URL('../src/shared/navigation-targets.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/shared/manege-template.js', [new URL('../src/shared/manege-template.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/src/shared/pathfinder.js', [new URL('../src/shared/pathfinder.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/test/venue-test.js', [new URL('../test/venue-test.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/test/venue-test.css', [new URL('../test/venue-test.css', import.meta.url), 'text/css; charset=utf-8']],
@@ -236,7 +239,7 @@ function fitBackgroundPlacement(width, height) {
   };
 }
 
-export function createAppServer({ store, organizerToken = '', backgroundDirectory }) {
+export function createAppServer({ store, organizerToken = '', backgroundDirectory, panoramaDirectory = backgroundDirectory ? join(dirname(backgroundDirectory), 'panoramas') : null, stitchServiceUrl = 'http://127.0.0.1:5000' }) {
   return createServer(async (req, res) => {
     try {
       let pathname;
@@ -248,6 +251,60 @@ export function createAppServer({ store, organizerToken = '', backgroundDirector
 
       if (pathname === '/api/health' && (req.method === 'GET' || req.method === 'HEAD')) {
         return respondJson(req, res, 200, { ok: true, stage: 'venue-storage', mapSavingImplemented: true });
+      }
+
+      if (pathname.startsWith('/api/panoramas/') || /^\/api\/venues\/[^/]+\/floors\/[^/]+\/targets\/[^/]+\/stitch$/.test(pathname)) {
+        await handlePanoramaRequest(req, res, pathname, { store, organizerToken, panoramaDirectory, stitchServiceUrl });
+        return;
+      }
+
+      const panoramaImageMatch = /^\/api\/venues\/([^/]+)\/floors\/([^/]+)\/panoramas\/([^/]+)\/image$/.exec(pathname);
+      if (panoramaImageMatch) {
+        const [, venueId, floorId, pointId] = panoramaImageMatch.map(decodeURIComponent);
+        const venue = await store.get(venueId);
+        if (!venue) throw new ApiError(404, 'not_found', 'Площадка не найдена.');
+        const floor = venue.floors.find((entry) => entry.id === floorId);
+        const point = floor?.panoramaPoints.find((entry) => entry.id === pointId);
+        if (!point) throw new ApiError(404, 'not_found', 'Точка панорамы не найдена.');
+        if (req.method === 'GET' || req.method === 'HEAD') {
+          if (!point.imageId) throw new ApiError(404, 'not_found', 'Изображение панорамы не загружено.');
+          try {
+            const bytes = await readFile(join(panoramaDirectory, venueId, `${point.imageId}.jpg`));
+            return respond(req, res, 200, 'image/jpeg', bytes, { 'Content-Length': bytes.length });
+          } catch (error) {
+            if (error.code === 'ENOENT') throw new ApiError(404, 'not_found', 'Файл панорамы отсутствует.');
+            throw error;
+          }
+        }
+        if (req.method !== 'PUT') return respondJson(req, res, 405, { error: 'method_not_allowed' }, { Allow: 'GET, HEAD, PUT' });
+        authorize(req, organizerToken);
+        if (!panoramaDirectory) throw new ApiError(503, 'panorama_storage_not_configured', 'Каталог панорам не настроен.');
+        const revision = expectedRevision(req);
+        const upload = await readBackgroundUpload(req);
+        if (upload.mediaType !== 'image/jpeg') throw new ApiError(415, 'unsupported_image_type', 'Для панорамы выберите JPEG.');
+        const imageId = randomUUID();
+        const directory = join(panoramaDirectory, venueId);
+        const destination = join(directory, `${imageId}.jpg`);
+        const temporary = `${destination}.tmp`;
+        try {
+          await mkdir(directory, { recursive: true });
+          await writeFile(temporary, upload.bytes, { flag: 'wx', mode: 0o600 });
+          await rename(temporary, destination);
+        } catch (error) {
+          await rm(temporary, { force: true }).catch(() => {});
+          throw error;
+        }
+        const previousImageId = point.imageId;
+        point.imageId = imageId;
+        let saved;
+        try {
+          saved = await store.replace(venueId, { name: venue.name, floors: venue.floors }, revision);
+        } catch (error) {
+          await rm(destination, { force: true }).catch(() => {});
+          throw error;
+        }
+        if (previousImageId) await rm(join(directory, `${previousImageId}.jpg`), { force: true }).catch(() => {});
+        return respondJson(req, res, 200, saved, { ETag: `"${saved.revision}"` });
       }
 
       const backgroundFileMatch = /^\/api\/venues\/([^/]+)\/floors\/([^/]+)\/background\/([^/]+)$/.exec(pathname);

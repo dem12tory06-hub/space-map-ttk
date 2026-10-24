@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 
 const elementTypes = new Set(['zone', 'table', 'stand', 'stage', 'partition']);
-const placeTypes = new Set(['entrance', 'registration', 'service', 'wifi']);
+const placeTypes = new Set(['entrance', 'registration', 'service', 'wifi', 'wc']);
 const storeSchemaVersion = 1;
 const planWidth = 1000;
 const planHeight = 600;
@@ -61,6 +61,11 @@ function requireCoordinate(value, path, allowZero = true) {
   return value;
 }
 
+function requireColor(value, path) {
+  if (typeof value !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(value)) invalid(`${path} должен быть цветом вида #RRGGBB.`);
+  return value.toLowerCase();
+}
+
 function validatePoint(value, path) {
   requireObject(value, path);
   requireKeys(value, ['x', 'y'], [], path);
@@ -75,7 +80,7 @@ function validateElements(value, path, usedIds) {
   return value.map((item, index) => {
     const itemPath = `${path}[${index}]`;
     requireObject(item, itemPath);
-    requireKeys(item, ['id', 'type', 'name', 'x', 'y', 'width', 'height'], ['rotation'], itemPath);
+    requireKeys(item, ['id', 'type', 'name', 'x', 'y', 'width', 'height'], ['rotation', 'color'], itemPath);
     const type = requireString(item.type, `${itemPath}.type`, 24);
     if (!elementTypes.has(type)) invalid(`${itemPath}.type не поддерживается.`);
     if (typeof item.x !== 'number' || !Number.isFinite(item.x)) invalid(`${itemPath}.x должен быть конечным числом.`);
@@ -110,6 +115,7 @@ function validateElements(value, path, usedIds) {
       width,
       height,
       rotation,
+      ...(item.color === undefined ? {} : { color: requireColor(item.color, `${itemPath}.color`) }),
     };
   });
 }
@@ -119,7 +125,7 @@ function validatePlaces(value, path, usedIds) {
   return value.map((item, index) => {
     const itemPath = `${path}[${index}]`;
     requireObject(item, itemPath);
-    requireKeys(item, ['id', 'type', 'name', 'category', 'description', 'x', 'y'], ['wifiLogin', 'wifiPassword'], itemPath);
+    requireKeys(item, ['id', 'type', 'name', 'category', 'description', 'x', 'y'], ['wifiLogin', 'wifiPassword', 'color'], itemPath);
     const type = requireString(item.type, `${itemPath}.type`, 24);
     if (!placeTypes.has(type)) invalid(`${itemPath}.type не поддерживается.`);
     if (type !== 'wifi' && (Object.hasOwn(item, 'wifiLogin') || Object.hasOwn(item, 'wifiPassword'))) invalid(`${itemPath}: поля Wi-Fi допускаются только для точки Wi-Fi.`);
@@ -134,6 +140,7 @@ function validatePlaces(value, path, usedIds) {
         wifiPassword: requireString(item.wifiPassword ?? '', `${itemPath}.wifiPassword`, 120, true),
       } : {}),
       ...validatePoint({ x: item.x, y: item.y }, itemPath),
+      ...(item.color === undefined ? {} : { color: requireColor(item.color, `${itemPath}.color`) }),
     };
   });
 }
@@ -143,11 +150,26 @@ function validatePanoramaPoints(value, path, usedIds) {
   return value.map((item, index) => {
     const itemPath = `${path}[${index}]`;
     requireObject(item, itemPath);
-    requireKeys(item, ['id', 'name', 'x', 'y'], [], itemPath);
+    requireKeys(item, ['id', 'name', 'x', 'y'], ['imageId', 'imageUrl', 'haov', 'vaov', 'placeId'], itemPath);
+    const imageId = item.imageId === undefined ? undefined : requireString(item.imageId, `${itemPath}.imageId`, 80);
+    if (imageId && !/^[a-f0-9-]{36}$/.test(imageId)) invalid(`${itemPath}.imageId имеет недопустимый формат.`);
+    const imageUrl = item.imageUrl === undefined ? undefined : requireString(item.imageUrl, `${itemPath}.imageUrl`, 120);
+    if (imageUrl && !/^\/api\/panoramas\/[a-f0-9]{32}\.jpg$/.test(imageUrl)) invalid(`${itemPath}.imageUrl имеет недопустимый адрес.`);
+    const haov = item.haov === undefined ? undefined : item.haov;
+    if (haov !== undefined && (typeof haov !== 'number' || !Number.isFinite(haov) || haov < 1 || haov > 360)) {
+      invalid(`${itemPath}.haov должен быть числом от 1 до 360.`);
+    }
+    const vaov = item.vaov === undefined ? undefined : item.vaov;
+    if (vaov !== undefined && (typeof vaov !== 'number' || !Number.isFinite(vaov) || vaov < 1 || vaov > 180)) invalid(`${itemPath}.vaov должен быть числом от 1 до 180.`);
     return {
       id: requireId(item.id, `${itemPath}.id`, usedIds),
       name: requireString(item.name, `${itemPath}.name`, 120),
       ...validatePoint({ x: item.x, y: item.y }, itemPath),
+      ...(imageId ? { imageId } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
+      ...(haov === undefined ? {} : { haov }),
+      ...(vaov === undefined ? {} : { vaov }),
+      ...(item.placeId === undefined || item.placeId === '' ? {} : { placeId: requireString(item.placeId, `${itemPath}.placeId`, 80) }),
     };
   });
 }
@@ -253,6 +275,11 @@ function validateFloors(value, usedIds) {
     const elements = validateElements(floor.plan.elements, `${path}.plan.elements`, usedIds);
     const places = validatePlaces(floor.places, `${path}.places`, usedIds);
     const panoramaPoints = validatePanoramaPoints(floor.panoramaPoints, `${path}.panoramaPoints`, usedIds);
+    const panoramaTargetIds = new Set([...places.map((place) => place.id),
+      ...elements.filter((element) => ['zone', 'stand', 'stage'].includes(element.type)).map((element) => element.id)]);
+    for (const point of panoramaPoints) {
+      if (point.placeId && !panoramaTargetIds.has(point.placeId)) invalid(`${path}.panoramaPoints содержит ссылку на отсутствующую точку.`);
+    }
     const routeNodes = validateRouteNodes(floor.routeNodes, `${path}.routeNodes`, usedIds);
     const routeNodeIds = new Set(routeNodes.map((node) => node.id));
     const placeIds = new Set([...places.map((place) => place.id),

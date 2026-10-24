@@ -24,6 +24,12 @@ function backgroundPlacement(background) {
   return { x: (1 - width) / 2, y: (1 - height) / 2, width, height };
 }
 
+function panoramaImageUrl(venue, floor, point) {
+  return point.imageUrl ?? (point.imageId
+    ? `/api/venues/${encodeURIComponent(venue.id)}/floors/${encodeURIComponent(floor.id)}/panoramas/${encodeURIComponent(point.id)}/image`
+    : null);
+}
+
 export function routeBetween(floor, fromPlaceId, toPlaceId) {
   const nodes = floor.routeNodes ?? [];
   const edges = floor.routeEdges ?? [];
@@ -136,6 +142,7 @@ function renderVenue(container, venue, floor) {
       <div class="visitor-map__canvas">
         <svg viewBox="0 0 1000 600" role="img" aria-label="План площадки с местами и панорамами" data-svg></svg>
       </div>
+      <div class="visitor-map__legend" data-legend aria-label="Условные обозначения"></div>
       <section class="visitor-map__card" data-card hidden>
         <h2 data-card-title></h2><p data-card-description></p>
         <button type="button" data-open-panorama hidden>Осмотреть панораму</button>
@@ -147,6 +154,7 @@ function renderVenue(container, venue, floor) {
   const start = container.querySelector('[data-start]');
   const finish = container.querySelector('[data-finish]');
   const targets = navigationTargets(floor);
+  const legend = container.querySelector('[data-legend]');
   let selectedPanoramaId = null;
   let path = null;
   let customStart = null;
@@ -182,7 +190,7 @@ function renderVenue(container, venue, floor) {
       const rectangle = svg('rect', {
         x, y, width, height, rx: element.type === 'zone' ? 12 : 3,
         transform: `rotate(${element.rotation ?? 0} ${x + width / 2} ${y + height / 2})`,
-        fill: element.type === 'partition' ? '#52615c' : element.type === 'zone' ? '#cfe3c5' : '#e9d4ab',
+        fill: element.color ?? (element.type === 'partition' ? '#52615c' : element.type === 'zone' ? '#cfe3c5' : '#e9d4ab'),
         'fill-opacity': element.type === 'zone' ? 0.45 : 0.9,
         stroke: '#52615c', 'stroke-width': 2,
         ...(['stand', 'stage'].includes(element.type) ? {
@@ -217,7 +225,7 @@ function renderVenue(container, venue, floor) {
       const marker = svg('g', { 'data-place-id': place.id, tabindex: 0, role: 'button', 'aria-label': place.name });
       marker.append(svg('circle', {
         cx: point.x, cy: point.y, r: 15,
-        fill: place.type === 'zone' ? '#7553ae' : place.type === 'wifi' ? '#257c9b' : '#e3343e',
+        fill: place.color ?? (place.type === 'wc' ? '#a74163' : place.type === 'wifi' ? '#257c9b' : '#e3343e'),
         stroke: '#fff', 'stroke-width': 4,
       }));
       const label = svg('text', { x: point.x + 21, y: point.y - 16, class: 'visitor-map__label' });
@@ -246,7 +254,7 @@ function renderVenue(container, venue, floor) {
     card.querySelector('[data-card-description]').textContent = target.description;
     const nearest = (floor.panoramaPoints ?? []).find((pano) => pano.placeId === target.id);
     const open = card.querySelector('[data-open-panorama]');
-    open.hidden = !nearest?.imageUrl;
+    open.hidden = !nearest || !panoramaImageUrl(venue, floor, nearest);
     if (nearest) selectedPanoramaId = nearest.id;
     finish.value = target.id;
     customFinish = null;
@@ -258,10 +266,38 @@ function renderVenue(container, venue, floor) {
     selectedPanoramaId = panorama.id;
     card.hidden = false;
     card.querySelector('[data-card-title]').textContent = panorama.name;
-    card.querySelector('[data-card-description]').textContent = panorama.imageUrl
+    card.querySelector('[data-card-description]').textContent = panoramaImageUrl(venue, floor, panorama)
       ? 'Выберите обзор, чтобы осмотреть эту точку.'
       : 'К этой точке ещё не прикреплено изображение панорамы.';
-    card.querySelector('[data-open-panorama]').hidden = !panorama.imageUrl;
+    card.querySelector('[data-open-panorama]').hidden = !panoramaImageUrl(venue, floor, panorama);
+  }
+
+  const legendTitle = document.createElement('strong');
+  legendTitle.textContent = 'Условные обозначения';
+  legend.append(legendTitle);
+  for (const item of [
+    ...floor.plan.elements.filter((entry) => ['zone', 'stage'].includes(entry.type)).map((entry) => ({
+      ...entry, legendKind: entry.type === 'zone' ? 'zone' : 'target',
+      legendColor: entry.color ?? '#cfe3c5',
+    })),
+    ...floor.places.map((entry) => ({ ...entry, legendKind: 'target', legendColor: entry.color ?? '#e3343e' })),
+    ...(floor.panoramaPoints ?? []).map((entry) => ({ ...entry, legendKind: 'panorama', legendColor: '#247b85' })),
+  ]) {
+    const row = document.createElement(item.legendKind === 'zone' ? 'span' : 'button');
+    if (row instanceof HTMLButtonElement) row.type = 'button';
+    row.className = 'visitor-map__legend-item';
+    const swatch = document.createElement('i');
+    swatch.style.backgroundColor = item.legendColor;
+    swatch.setAttribute('aria-hidden', 'true');
+    const name = document.createElement('span');
+    name.textContent = item.name;
+    row.append(swatch, name);
+    if (item.legendKind === 'panorama') row.addEventListener('click', () => showPanorama(item));
+    if (item.legendKind === 'target') row.addEventListener('click', () => {
+      const target = targets.find((entry) => entry.id === item.id);
+      if (target) showTarget(target);
+    });
+    legend.append(row);
   }
 
   function selectMarker(target) {
@@ -333,9 +369,12 @@ function renderVenue(container, venue, floor) {
   });
   card.querySelector('[data-open-panorama]').addEventListener('click', async () => {
     const panorama = floor.panoramaPoints.find((item) => item.id === selectedPanoramaId);
-    if (!panorama?.imageUrl) return;
+    if (!panorama || !panoramaImageUrl(venue, floor, panorama)) return;
     const { openPanorama } = await import('../panorama/panorama-viewer.js');
-    openPanorama(container, floor.panoramaPoints, panorama.id, floor.places);
+    const scenes = floor.panoramaPoints.map((point) => ({
+      ...point, imageUrl: panoramaImageUrl(venue, floor, point),
+    }));
+    openPanorama(container, scenes, panorama.id, floor.places);
   });
   draw();
 }

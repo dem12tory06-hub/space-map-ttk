@@ -1,0 +1,280 @@
+{
+  "id": "6e03d42c-872f-4f2b-8b20-42b0b1ecaefc",
+  "name": "Манеж ДГТУ — Хакатон Осень 2026",
+  "revision": 2,
+  "createdAt": "2026-10-24T17:11:42.236Z",
+  "updatedAt": "2026-10-24T17:11:42.251Z",
+  "floors": [
+    {
+      "id": "95f301d0-989e-4489-a567-8dae889510d2",
+      "name": "Этаж 1",
+      "plan": {
+        "id": "5b38764f-3203-49d0-a170-06cd970c52c9",
+        "width": 1,
+        "height": 1,
+        "elements": [
+          {
+            "id": "manege-wall-top",
+            "type": "partition",
+            "name": "Стена 1",
+            "x": 0.07,
+            "y": 0.07156365203857419,
+            "width": 0.84,
+            "height": 0.03,
+            "rotation": 0
+          },
+          {
+            "id": "manege-wall-left",
+            "type": "partition",
+            "name": "Стена 2",
+            "x": -0.1911776847839355,
+            "y": 0.5120377095540365,
+            "width": 0.5283660278320312,
+            "height": 0.03,
+            "rotation": 270
+          },
+          {
+            "id": "manege-wall-right",
+            "type": "partition",
+            "name": "Стена 3",
+            "x": 0.6352577209472656,
+            "y": 0.512655283610026,
+            "width": 0.5324757690429688,
+            "height": 0.03,
+            "rotation": 90
+          },
+          {
+            "id": "manege-wall-bottom-left",
+            "type": "partition",
+            "name": "Стена 4",
+            "x": 0.08231436920166016,
+            "y": 0.627521026611328,
+            "width": 0.3676856307983398,
+            "height": 0.03,
+            "rotation": 0
+          },
+          {
+            "id": "manege-wall-bottom-right",
+            "type": "partition",
+            "name": "Стена 5",
+            "x": 0.5712125244140625,
+            "y": 0.6255,
+            "width": 0.34,
+            "height": 0.03,
+            "rotation": 0
+          },
+          {
+            "id": "manege-partners",
+            "type": "zone",
+            "name": "Зона партнёров",
+            "x": 0.11104759216308593,
+            "y": 0.130174560546875,
+            "width": 0.105,
+            "height": 0.46,
+            "rotation": 0,
+            "color": "#72c879"
+          },
+          {
+            "id": "manege-participants",
+            "type": "zone",
+            "name": "Зона участников",
+            "x": 0.2611538391113281,
+            "y": 0.20561449686686198,
+            "width": 0.47170779418945313,
+            "height": 0.36068382263183596,
+            "rotation": 0,
+            "color": "#667de2"
+          },
+          {
+            "id": "manege-rest",
+            "type": "zone",
+            "name": "Зона отдыха",
+            "x": 0.7474205322265625,
+            "y": 0.11034919738769532,
+            "width": 0.12,
+            "height": 0.13,
+            "rotation": 0,
+            "color": "#70cee5"
+          },
+          {
+            "id": "manege-food",
+            "type": "zone",
+            "name": "Зона питания",
+            "x": 0.22177876281738282,
+            "y": 0.8218147277832031,
+            "width": 0.18060966491699218,
+            "height": 0.11105794270833333,
+            "rotation": 0,
+            "color": "#edcf65"
+          },
+          {
+            "id": "manege-stage",
+            "type": "stage",
+            "name": "Сцена",
+            "x": 0.42848919677734376,
+            "y": 0.10116968790690105,
+            "width": 0.1389185791015625,
+            "height": 0.14055399576822916,
+            "rotation": 0,
+            "color": "#cf4d47"
+          },
+          {
+            "id": "manege-stand-a",
+            "type": "stand",
+            "name": "Стенд A",
+            "x": 0.7050529174804687,
+            "y": 0.2721087646484375,
+            "width": 0.095,
+            "height": 0.075,
+            "rotation": 0,
+            "color": "#bd9957"
+          },
+          {
+            "id": "manege-stand-b",
+            "type": "stand",
+            "name": "Стенд B",
+            "x": 0.7042108764648437,
+            "y": 0.4226326497395833,
+            "width": 0.095,
+            "height": 0.075,
+            "rotation": 0,
+            "color": "#bd9957"
+          },
+          {
+            "id": "1a56bd0d-c18d-40b3-a208-3c3a80ae7190",
+            "type": "partition",
+            "name": "Стена 6",
+            "x": 0.5699098815917969,
+            "y": 0.8359632364908854,
+            "width": 0.018,
+            "height": 0.11925211588541665,
+            "rotation": 0
+          },
+          {
+            "id": "fa0c84ec-aaed-46eb-a234-56a2beab866a",
+            "type": "partition",
+            "name": "Стена 7",
+            "x": 0.43473861694335936,
+            "y": 0.8319208272298177,
+            "width": 0.018,
+            "height": 0.12898971557617184,
+            "rotation": 0
+          },
+          {
+            "id": "1cc01f15-e1f0-4fad-8458-b9ad17637247",
+            "type": "partition",
+            "name": "Стена 8",
+            "x": 0.063681640625,
+            "y": 0.9503710886637369,
+            "width": 0.84,
+            "height": 0.03,
+            "rotation": 0
+          }
+        ]
+      },
+      "places": [
+        {
+          "id": "manege-entrance",
+          "type": "entrance",
+          "name": "Главный вход",
+          "category": "",
+          "description": "Вход в манеж.",
+          "x": 0.4550137023925782,
+          "y": 0.9242496236165365
+        },
+        {
+          "id": "manege-registration",
+          "type": "registration",
+          "name": "Регистрация",
+          "category": "",
+          "description": "Стойка регистрации у главного входа.",
+          "x": 0.4353541259765626,
+          "y": 0.5974821980794272
+        },
+        {
+          "id": "manege-wardrobe",
+          "type": "service",
+          "name": "Гардероб",
+          "category": "",
+          "description": "Гардероб рядом со входом.",
+          "x": 0.2636803283691406,
+          "y": 0.7015714518229167
+        },
+        {
+          "id": "manege-wc",
+          "type": "wc",
+          "name": "WC",
+          "category": "",
+          "description": "Туалет рядом с зоной регистрации.",
+          "x": 0.6244415893554687,
+          "y": 0.7037734985351562
+        },
+        {
+          "id": "manege-wifi",
+          "type": "wifi",
+          "name": "Wi-Fi",
+          "category": "",
+          "description": "",
+          "wifiLogin": "",
+          "wifiPassword": "",
+          "x": 0.6504140625,
+          "y": 0.8498165384928387
+        },
+        {
+          "id": "manege-partners-entry",
+          "type": "service",
+          "name": "Партнёры",
+          "category": "",
+          "description": "Вход в зону партнёров.",
+          "x": 0.1838857421875,
+          "y": 0.4531632232666016
+        },
+        {
+          "id": "manege-rest-entry",
+          "type": "service",
+          "name": "Отдых",
+          "category": "",
+          "description": "Вход в зону отдыха.",
+          "x": 0.7187266235351563,
+          "y": 0.14366683959960935
+        },
+        {
+          "id": "manege-food-entry",
+          "type": "service",
+          "name": "Питание",
+          "category": "",
+          "description": "Вход в зону питания.",
+          "x": 0.7650939636230469,
+          "y": 0.8967917378743491
+        },
+        {
+          "id": "8317f16e-9e58-4532-bc85-b3bce6ffbab9",
+          "type": "wc",
+          "name": "WC",
+          "category": "",
+          "description": "Туалет рядом с зоной регистрации.",
+          "x": 0.3990937805175781,
+          "y": 0.6999180603027344
+        }
+      ],
+      "panoramaPoints": [
+        {
+          "id": "manege-panorama-entrance",
+          "name": "Панорама у входа",
+          "x": 0.48510671997070315,
+          "y": 0.6333675638834634,
+          "placeId": "manege-entrance"
+        },
+        {
+          "id": "manege-panorama-partners",
+          "name": "Панорама зоны партнёров",
+          "x": 0.18747354125976562,
+          "y": 0.257541987101237,
+          "placeId": "manege-partners"
+        }
+      ],
+      "routeNodes": [],
+      "routeEdges": []
+    }
+  ]
+}

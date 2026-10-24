@@ -15,6 +15,11 @@
 .visitor-map__canvas [role="button"]:focus-visible { outline: none; filter: drop-shadow(0 0 8px #227bfa); }
 .visitor-map__label { fill: #142c2d; font-size: 15px; font-weight: 750; paint-order: stroke;
   stroke: #fff; stroke-width: 4px; pointer-events: none; }
+.visitor-map__legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 6px; margin-top: 10px; }
+.visitor-map__legend > strong { grid-column: 1 / -1; font-size: 13px; }
+.visitor-map__legend-item { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 5px 8px; border: 1px solid #648a91; border-radius: 8px; color: #eaf4f3; background: #203f4d; font: inherit; font-size: 12px; text-align: left; }
+button.visitor-map__legend-item { cursor: pointer; }
+.visitor-map__legend-item i { flex: none; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; }
 .visitor-map__card { margin-top: 10px; padding: 12px; border: 1px solid #648a91; border-radius: 12px; background: #203f4d; }
 .visitor-map__card h2 { margin: 0; font-size: 18px; }
 .visitor-map__card p { margin: 6px 0 12px; white-space: pre-line; }
@@ -24,5 +29,6 @@
   .visitor-shell__device { width: 100%; padding: 0; border: 0; border-radius: 12px; box-shadow: none; }
   .visitor-shell__device::after { display: none; }
   .visitor-shell__screen { border-radius: 12px; }
-  .visitor-map__canvas svg { min-width: 500px; }
+  .visitor-map__canvas svg { min-width: 0; }
+  .visitor-map__label { display: none; }
 }

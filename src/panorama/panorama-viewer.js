@@ -93,9 +93,18 @@ export async function openPanorama(container, panoramaPoints, firstId, places) {
           text: `Перейти: ${next.name}`,
         });
       }
+      const stitched = /^\/api\/panoramas\/[a-f0-9]{32}\.jpg$/.test(point.imageUrl);
+      const haov = stitched ? Math.min(point.haov ?? 180, 180) : (point.haov ?? 360);
+      const vaov = stitched ? Math.min(point.vaov ?? 120, 120) : (point.vaov ?? 180);
       sceneConfig[point.id] = {
         type: 'equirectangular', panorama: point.imageUrl, title: point.name,
-        haov: point.haov ?? 360, vaov: point.vaov ?? 180, vOffset: point.vOffset ?? 0,
+        haov, vaov, vOffset: point.vOffset ?? 0,
+        // OpenCV stitches a partial view. Stop rotation at its photographed edges.
+        ...(stitched ? {
+          minYaw: -haov / 2, maxYaw: haov / 2,
+          minPitch: -vaov / 2, maxPitch: vaov / 2,
+          hfov: 65, maxHfov: 75, ignoreGPanoXMP: true,
+        } : {}),
         avoidShowingBackground: true, autoLoad: true, hotSpots,
       };
     }

@@ -9,4 +9,8 @@ tmp/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+tools/panorama-stitch/.venv/
+tools/panorama-stitch/panoramas/
+**/__pycache__/
+*.pyc
 .DS_Store

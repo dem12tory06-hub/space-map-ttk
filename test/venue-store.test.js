@@ -62,6 +62,34 @@ test('creates a venue with one empty floor and persists edits and deletions acro
   });
 });
 
+test('saves a WC place and reference colors across reopening', async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const filePath = join(directory, 'venues.json');
+    const store = createVenueStore(filePath);
+    const venue = await store.create('Манеж');
+    const floor = venue.floors[0];
+    const saved = await store.replace(venue.id, {
+      name: venue.name,
+      floors: [{ ...floor,
+        plan: { ...floor.plan, elements: [{
+          id: 'participants', type: 'zone', name: 'Участники',
+          x: 0.3, y: 0.3, width: 0.4, height: 0.3, rotation: 0, color: '#284BCC',
+        }] },
+        places: [{
+          id: 'wc', type: 'wc', name: 'WC', category: 'Сервис', description: '',
+          x: 0.5, y: 0.85, color: '#A74163',
+        }],
+      }],
+    }, venue.revision);
+    const reopened = createVenueStore(filePath);
+    const loaded = await reopened.get(venue.id);
+    assert.equal(loaded.revision, saved.revision);
+    assert.equal(loaded.floors[0].places[0].type, 'wc');
+    assert.equal(loaded.floors[0].places[0].color, '#a74163');
+    assert.equal(loaded.floors[0].plan.elements[0].color, '#284bcc');
+  });
+});
+
 test('rejects out-of-range normalized geometry', async () => {
   await withTemporaryDirectory(async (directory) => {
     const store = createVenueStore(join(directory, 'venues.json'));

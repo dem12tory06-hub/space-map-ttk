@@ -503,8 +503,58 @@ test('protects background upload, keeps images outside JSON, and preserves old i
         assert.equal(withoutBackground.floors[0].plan.background, null);
         assert.equal(withoutBackground.floors[0].plan.elements[0].id, 'stable-table-id');
         assert.equal((await fetch(`${reopened.baseUrl}/api/venues/${venueId}/floors/${floorId}/background/${currentBackgroundId}`)).status, 404);
+
+        const point = { id: 'panorama-entrance', name: 'Вход', x: 0.25, y: 0.7, haov: 180 };
+        const pointSave = await fetch(`${reopened.baseUrl}/api/venues/${venueId}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${organizerToken}`,
+            'Content-Type': 'application/json',
+            'If-Match': '"7"',
+          },
+          body: JSON.stringify({ name: withoutBackground.name, floors: [
+            { ...withoutBackground.floors[0], panoramaPoints: [point] },
+          ] }),
+        });
+        assert.equal(pointSave.status, 200);
+        const panoramaUrl = `${reopened.baseUrl}/api/venues/${venueId}/floors/${floorId}/panoramas/${point.id}/image`;
+        assert.equal((await fetch(panoramaUrl)).status, 404);
+        const noKey = await fetch(panoramaUrl, {
+          method: 'PUT', headers: { 'Content-Type': 'image/jpeg', 'If-Match': '"8"' }, body: jpeg,
+        });
+        assert.equal(noKey.status, 401);
+        const uploaded = await fetch(panoramaUrl, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${organizerToken}`, 'Content-Type': 'image/jpeg', 'If-Match': '"8"' },
+          body: jpeg,
+        });
+        assert.equal(uploaded.status, 200);
+        const withPanorama = await uploaded.json();
+        assert.match(withPanorama.floors[0].panoramaPoints[0].imageId, /^[a-f0-9-]{36}$/);
+        assert.equal(withPanorama.floors[0].panoramaPoints[0].haov, 180);
+        const imageRead = await fetch(panoramaUrl);
+        assert.equal(imageRead.status, 200);
+        assert.deepEqual(Buffer.from(await imageRead.arrayBuffer()), jpeg);
+        const staleUpload = await fetch(panoramaUrl, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${organizerToken}`, 'Content-Type': 'image/jpeg', 'If-Match': '"8"' },
+          body: jpeg,
+        });
+        assert.equal(staleUpload.status, 412);
+        assert.equal((await fetch(panoramaUrl)).status, 200);
     } finally {
       await stopServer(reopened.server);
+    }
+    const afterPanoramaRestart = await startServer(directory);
+    try {
+      const persisted = await (await fetch(`${afterPanoramaRestart.baseUrl}/api/venues/${venueId}`)).json();
+      assert.equal(persisted.floors[0].panoramaPoints[0].name, 'Вход');
+      assert.ok(persisted.floors[0].panoramaPoints[0].imageId);
+      const image = await fetch(`${afterPanoramaRestart.baseUrl}/api/venues/${venueId}/floors/${floorId}/panoramas/panorama-entrance/image`);
+      assert.equal(image.status, 200);
+      assert.deepEqual(Buffer.from(await image.arrayBuffer()), jpeg);
+    } finally {
+      await stopServer(afterPanoramaRestart.server);
     }
   });
 });

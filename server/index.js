@@ -17,6 +17,8 @@ const server = createAppServer({
   store,
   organizerToken: process.env.ORGANIZER_TOKEN ?? '',
   backgroundDirectory: join(dataDirectory, 'backgrounds'),
+  panoramaDirectory: join(dataDirectory, 'panoramas'),
+  stitchServiceUrl: process.env.STITCH_SERVICE_URL ?? 'http://127.0.0.1:5000',
 });
 
 server.on('error', (error) => {

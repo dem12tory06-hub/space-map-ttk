@@ -1,0 +1,21 @@
+[Unit]
+Description=Space Map TTK panorama stitching worker
+After=network.target
+
+[Service]
+Type=simple
+User=spacemap
+Group=spacemap
+WorkingDirectory=/opt/space-map-ttk
+Environment=DATA_DIR=/var/lib/space-map-ttk
+ExecStart=/opt/space-map-panorama-venv/bin/python /opt/space-map-ttk/server/panorama-worker.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/space-map-ttk
+
+[Install]
+WantedBy=multi-user.target

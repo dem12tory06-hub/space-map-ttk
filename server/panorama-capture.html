@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Создание панорамы — ТТК</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #f3f5f8;
+      color: #172033;
+      font-family: Arial, sans-serif;
+      line-height: 1.5;
+    }
+
+    main {
+      max-width: 850px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    section {
+      margin: 18px 0;
+      padding: 20px;
+      background: white;
+      border-radius: 16px;
+    }
+
+    h1 { font-size: 26px; }
+    h2 { font-size: 20px; }
+    label { display: block; font-weight: bold; }
+
+    select, input {
+      width: 100%;
+      margin-top: 10px;
+      padding: 12px;
+      font: inherit;
+    }
+
+    button {
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid #ccd3df;
+      border-radius: 8px;
+      background: white;
+      color: #172033;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: 0.4; cursor: default; }
+    button:focus-visible { outline: 3px solid #2962ff; }
+
+    .hint { color: #526078; }
+    #message { color: #a02d17; }
+
+    #photos {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 16px;
+    }
+
+    .photo {
+      padding: 12px;
+      border: 1px solid #dce1ea;
+      border-radius: 12px;
+      min-width: 0;
+    }
+
+    .photo img {
+      display: block;
+      width: 100%;
+      height: 200px;
+      object-fit: contain;
+      background: #edf0f5;
+      border-radius: 8px;
+    }
+
+    .filename {
+      overflow-wrap: anywhere;
+      color: #526078;
+      font-size: 14px;
+    }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  </style>
+</head>
+
+<body>
+  <main>
+    <h1>Создание панорамы</h1>
+    <p><a id="mapLink" href="/constructor">← К конструктору</a></p>
+    <p id="loadStatus" role="status"></p>
+    <label for="organizerKey">Ключ организатора</label>
+    <input id="organizerKey" type="password" autocomplete="off" required>
+    <p>Добавьте фотографии, снятые с одной точки.</p>
+
+    <section>
+      <label for="point">Точка съёмки</label>
+      <select id="point" disabled><option value="">Загружаю места…</option></select>
+      <p class="hint">
+        У каждой точки своя серия фотографий.
+      </p>
+    </section>
+
+    <section>
+      <h2>Как снимать</h2>
+      <ol>
+        <li>Встаньте на выбранную точку и оставайтесь на месте.</li>
+        <li>Держите телефон вертикально на одной высоте.</li>
+        <li>Сделайте первый снимок в обычном режиме «Фото».</li>
+        <li>
+          Поворачивайте телефон вправо, сохраняя заметное
+          перекрытие соседних кадров — ориентировочно 30–50%.
+        </li>
+        <li>
+          Для первого теста попробуйте около 12 кадров за оборот.
+          Если перекрытия мало, делайте больше снимков.
+        </li>
+        <li>По возможности избегайте людей близко к камере.</li>
+      </ol>
+      <p class="hint">
+        Сначала снимите серию камерой телефона, затем выберите её ниже.
+      </p>
+    </section>
+
+    <section>
+      <h2>Добавление фотографий</h2>
+      <label for="files">Выберите снимки из галереи</label>
+      <input
+        id="files"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+      >
+      <p class="hint">
+        Для первого теста используйте JPEG. Можно добавлять
+        фотографии несколькими порциями.
+      </p>
+      <p id="message" role="status"></p>
+    </section>
+
+    <section>
+      <h2 id="counter" aria-live="polite">Добавлено кадров: 0</h2>
+      <p class="hint">
+        Проверьте порядок: от первого кадра далее по направлению
+        поворота. Кнопки «Раньше» и «Позже» меняют положение кадра.
+      </p>
+
+      <div id="photos"></div>
+
+      <p>
+        <button id="clear" type="button">Очистить серию этой точки</button>
+      </p>
+    </section>
+
+    <p class="hint">
+      Фотографии хранятся на этой странице до отправки. После склейки на сервере сохраняется JPEG; исходные кадры на устройстве остаются.
+    </p>
+  </main>
+
+  <script>
+    const pointSelect = document.getElementById("point");
+    const fileInput = document.getElementById("files");
+    const photosContainer = document.getElementById("photos");
+    const counter = document.getElementById("counter");
+    const message = document.getElementById("message");
+    const clearButton = document.getElementById("clear");
+
+    // Каждая точка хранит отдельную серию в памяти страницы.
+    const series = {};
+    const params = new URLSearchParams(location.search);
+    const venueId = params.get('venue');
+    const floorId = params.get('floor');
+    const requestedPointId = params.get('point');
+    let revision = null;
+    const loadStatus = document.getElementById('loadStatus');
+    document.getElementById('mapLink').href = venueId ? `/constructor?venue=${encodeURIComponent(venueId)}` : '/constructor';
+    if (!venueId || !floorId) {
+      loadStatus.textContent = 'Откройте съёмку из конструктора площадки.';
+    } else {
+      fetch(`/api/venues/${encodeURIComponent(venueId)}`).then(async response => {
+        if (!response.ok) throw new Error('Не удалось открыть площадку.');
+        return response.json();
+      }).then(venue => {
+        const floor = venue.floors.find(item => item.id === floorId);
+        if (!floor) throw new Error('План площадки не найден.');
+        revision = venue.revision;
+        pointSelect.replaceChildren();
+        // New maps use explicit panorama points; older maps can still capture against a place.
+        const targets = floor.panoramaPoints?.length
+          ? floor.panoramaPoints
+          : [...floor.places, ...floor.plan.elements.filter(item => ['zone', 'stand', 'stage'].includes(item.type))];
+        for (const target of targets) {
+          pointSelect.add(new Option(target.name, target.id));
+          series[target.id] = [];
+        }
+        pointSelect.disabled = targets.length === 0;
+        if (requestedPointId && targets.some(item => item.id === requestedPointId)) pointSelect.value = requestedPointId;
+        loadStatus.textContent = targets.length
+          ? `Площадка: ${venue.name}. Выберите место, снимите серию и соберите панораму.`
+          : 'Сначала поставьте точку панорамы на плане и сохраните площадку в конструкторе.';
+        renderPhotos();
+      }).catch(error => { loadStatus.textContent = error.message; });
+    }
+
+    function currentPhotos() {
+      return series[pointSelect.value] || [];
+    }
+
+    function createButton(text, onClick, disabled = false) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = text;
+      button.disabled = disabled;
+      button.addEventListener("click", onClick);
+      return button;
+    }
+
+    function movePhoto(index, direction) {
+      const photos = currentPhotos();
+      const target = index + direction;
+
+      if (target < 0 || target >= photos.length) return;
+
+      [photos[index], photos[target]] = [photos[target], photos[index]];
+      renderPhotos();
+    }
+
+    function removePhoto(index) {
+      const photos = currentPhotos();
+      const removed = photos.splice(index, 1)[0];
+
+      URL.revokeObjectURL(removed.url);
+      renderPhotos();
+    }
+
+    function renderPhotos() {
+      const photos = currentPhotos();
+
+      photosContainer.replaceChildren();
+      counter.textContent = `Добавлено кадров: ${photos.length}`;
+      clearButton.disabled = photos.length === 0;
+
+      photos.forEach((photo, index) => {
+        const card = document.createElement("article");
+        card.className = "photo";
+
+        const title = document.createElement("h3");
+        title.textContent = `Кадр ${index + 1}`;
+
+        const image = document.createElement("img");
+        image.src = photo.url;
+        image.alt = `Кадр ${index + 1}: ${photo.file.name}`;
+
+        const filename = document.createElement("p");
+        filename.className = "filename";
+        filename.textContent = photo.file.name;
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        actions.append(
+          createButton("← Раньше", () => movePhoto(index, -1), index === 0),
+          createButton(
+            "Позже →",
+            () => movePhoto(index, 1),
+            index === photos.length - 1
+          ),
+          createButton("Удалить", () => removePhoto(index))
+        );
+
+        card.append(title, image, filename, actions);
+        photosContainer.append(card);
+      });
+    }
+
+    fileInput.addEventListener("change", () => {
+      const photos = currentPhotos();
+      const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+      let skipped = 0;
+
+      // Имена снимков телефона часто идут в хронологическом порядке.
+      // Окончательный порядок пользователь проверяет вручную.
+      const selectedFiles = Array.from(fileInput.files).sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true })
+      );
+
+      for (const file of selectedFiles) {
+        const duplicate = photos.some(photo =>
+          photo.file.name === file.name &&
+          photo.file.size === file.size &&
+          photo.file.lastModified === file.lastModified
+        );
+
+        if (!allowedTypes.includes(file.type) || duplicate) {
+          skipped++;
+          continue;
+        }
+
+        photos.push({
+          file,
+          url: URL.createObjectURL(file)
+        });
+      }
+
+      message.textContent = skipped
+        ? `Пропущено файлов: ${skipped}. Это повторы или неподдерживаемый формат.`
+        : "Фотографии добавлены. Проверьте их порядок.";
+
+      fileInput.value = "";
+      renderPhotos();
+    });
+
+    pointSelect.addEventListener("change", () => {
+      message.textContent = "";
+      fileInput.value = "";
+      renderPhotos();
+    });
+
+    clearButton.addEventListener("click", () => {
+      if (!confirm("Убрать все фотографии этой точки со страницы?")) return;
+
+      for (const photo of currentPhotos()) {
+        URL.revokeObjectURL(photo.url);
+      }
+
+      series[pointSelect.value] = [];
+      message.textContent = "Серия очищена.";
+      renderPhotos();
+    });
+
+    renderPhotos();
+  </script>
+<script>
+  // Этот блок использует фотографии и выбор точки
+  // из уже существующего кода страницы.
+  const stitchSection = document.createElement("section");
+
+  stitchSection.innerHTML = `
+    <h2>Склейка панорамы</h2>
+
+    <button id="stitchButton" type="button">
+      Собрать панораму
+    </button>
+
+    <p id="stitchStatus" role="status"></p>
+
+    <div id="stitchResult" hidden>
+      <img
+        id="panoramaPreview"
+        alt="Результат склейки"
+        style="display:block; width:100%; margin-top:16px"
+      >
+      <p>
+        <a id="panoramaDownload" download>Скачать панораму JPEG</a>
+      </p>
+    </div>
+  `;
+
+  document.querySelector("main").append(stitchSection);
+
+  const stitchButton = document.getElementById("stitchButton");
+  const stitchStatus = document.getElementById("stitchStatus");
+  const stitchResult = document.getElementById("stitchResult");
+  const panoramaPreview = document.getElementById("panoramaPreview");
+  const panoramaDownload = document.getElementById("panoramaDownload");
+
+  pointSelect.addEventListener("change", () => {
+    stitchResult.hidden = true;
+    stitchStatus.textContent = "";
+  });
+
+  stitchButton.addEventListener("click", async () => {
+    if (!venueId || !floorId || !revision || !pointSelect.value) {
+      stitchStatus.textContent = 'Сначала откройте площадку и выберите место.';
+      return;
+    }
+    const organizerKey = document.getElementById('organizerKey').value;
+    if (!organizerKey) {
+      stitchStatus.textContent = 'Введите ключ организатора.';
+      return;
+    }
+
+    const photos = [...currentPhotos()];
+
+    if (photos.length < 2 || photos.length > 24) {
+      stitchStatus.textContent = "Для склейки нужно от 2 до 24 кадров.";
+      return;
+    }
+
+    const pointId = pointSelect.value;
+    const pointName = pointSelect.options[pointSelect.selectedIndex].text;
+
+    const form = new FormData();
+
+    for (const photo of photos) {
+      form.append("photos", photo.file, photo.file.name);
+    }
+
+    // Блокируем изменение серии на время обработки.
+    const controls = [
+      ...document.querySelectorAll("button, input, select")
+    ];
+    const previousStates = controls.map(control => control.disabled);
+
+    controls.forEach(control => control.disabled = true);
+    stitchResult.hidden = true;
+    stitchStatus.textContent =
+      `Собираем панораму «${pointName}». Дождитесь результата…`;
+
+    try {
+      const response = await fetch(`/api/venues/${encodeURIComponent(venueId)}/floors/${encodeURIComponent(floorId)}/targets/${encodeURIComponent(pointId)}/stitch`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${organizerKey}`, 'If-Match': `"${revision}"` },
+        body: form
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || "Ошибка сборки панорамы.");
+      }
+
+      revision = data.revision;
+      panoramaPreview.src = data.imageUrl;
+      panoramaDownload.href = data.imageUrl;
+      panoramaDownload.download = data.imageUrl.split("/").pop();
+
+      stitchResult.hidden = false;
+      stitchStatus.textContent =
+        `Панорама «${pointName}» собрана и сохранена: ` +
+        `${data.width} × ${data.height} пикселей. ` +
+        "Проверьте швы и убедитесь, что нужные части сцены вошли в результат.";
+    } catch (error) {
+      stitchStatus.textContent =
+        error instanceof TypeError
+          ? "Не удалось отправить кадры. Проверьте соединение и попробуйте ещё раз."
+          : error.message;
+    } finally {
+      controls.forEach((control, index) => {
+        control.disabled = previousStates[index];
+      });
+    }
+  });
+</script>
+</body>
+</html>
