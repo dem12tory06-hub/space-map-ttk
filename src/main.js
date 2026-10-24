@@ -1,4 +1,4 @@
-// Владелец: участник 1. Подключение реальных экранов согласуем по файлам участников 2 и 3.
+// Владелец: участник 1. Подключение экранов организатора и посетителя.
 const root = document.querySelector('#app');
 
 const screens = {
@@ -16,11 +16,13 @@ const screens = {
     <h1>Карта готовится.</h1>
     <p class="intro">План площадки, места и панорамы появятся после публикации карты организатором.</p>
     <div class="empty"><span class="empty-mark" aria-hidden="true">⌖</span><p>Опубликованной карты пока нет</p></div>`,
-  '/editor/demo': `
-    <a class="back" href="/">← На главную</a><div class="eyebrow">Организатору</div>
-    <h1>Редактор готовится.</h1>
-    <p class="intro">Экран создания площадки пока недоступен.</p>
-    <p class="notice">В этой версии нельзя изменять или сохранять данные карты.</p>`,
 };
 
-root.innerHTML = screens[window.location.pathname] ?? '<h1>Страница не найдена</h1><a href="/">На главную</a>';
+if (window.location.pathname === '/editor/demo') {
+  // У редактора своя адаптивная оболочка без ограничений стартового экрана.
+  root.classList.remove('shell');
+  const { mountEditor } = await import('./editor/editor.js');
+  mountEditor(root);
+} else {
+  root.innerHTML = screens[window.location.pathname] ?? '<h1>Страница не найдена</h1><a href="/">На главную</a>';
+}

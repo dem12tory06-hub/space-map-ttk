@@ -17,6 +17,8 @@ const pages = new Map([
 const assets = new Map([
   ['/src/main.js', [new URL('../src/main.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/src/styles/base.css', [new URL('../src/styles/base.css', import.meta.url), 'text/css; charset=utf-8']],
+  ['/src/editor/editor.js', [new URL('../src/editor/editor.js', import.meta.url), 'text/javascript; charset=utf-8']],
+  ['/src/editor/editor.css', [new URL('../src/editor/editor.css', import.meta.url), 'text/css; charset=utf-8']],
 ]);
 
 function respond(req, res, status, type, body, extraHeaders = {}) {
