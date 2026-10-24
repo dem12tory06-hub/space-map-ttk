@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Проверка API площадки</title>
+    <link rel="stylesheet" href="/test/venue-test.css" />
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Локальная проверка API</p>
+          <h1>Площадка и план</h1>
+        </div>
+        <a href="/">На главную</a>
+      </header>
+
+      <section class="access-row" aria-label="Доступ организатора">
+        <label class="wide-field" for="organizer-token">Временный токен организатора</label>
+        <input id="organizer-token" type="password" autocomplete="off" spellcheck="false" />
+        <p>Токен не добавляется в URL и не сохраняется браузером.</p>
+      </section>
+
+      <section class="venue-actions" aria-label="Создание или загрузка площадки">
+        <form id="create-form" class="action-form">
+          <label for="venue-name">Название площадки</label>
+          <input id="venue-name" name="name" required maxlength="120" value="Тестовая площадка" />
+          <button type="submit">Создать площадку</button>
+        </form>
+        <form id="load-form" class="action-form">
+          <label for="venue-id">Постоянный ID площадки</label>
+          <input id="venue-id" name="id" required />
+          <button type="submit">Загрузить по ID</button>
+        </form>
+        <p id="venue-summary" class="venue-summary">Площадка ещё не загружена.</p>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite">Готово к проверке.</p>
+
+      <section class="workspace" aria-label="Содержимое площадки">
+        <div class="plan-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Нормализованные координаты 0–1</p>
+              <h2>Предпросмотр плана</h2>
+            </div>
+            <button id="save-button" type="button" disabled>Сохранить изменения</button>
+          </div>
+          <svg id="plan-preview" viewBox="0 0 1000 600" role="img" aria-label="Предпросмотр элементов плана и мест">
+            <rect class="plan-background" x="0" y="0" width="1000" height="600" />
+          </svg>
+          <p>Изменение или удаление в списке пока локальное. Нажмите «Сохранить изменения», затем загрузите площадку заново.</p>
+        </div>
+
+        <aside class="edit-panel">
+          <section>
+            <h2>Добавить элемент плана</h2>
+            <form id="element-form" class="field-grid">
+              <label>Тип
+                <select name="type">
+                  <option value="zone">Зона</option>
+                  <option value="table">Стол</option>
+                  <option value="stand">Стенд</option>
+                  <option value="stage">Сцена</option>
+                  <option value="partition">Перегородка</option>
+                </select>
+              </label>
+              <label>Название<input name="name" required maxlength="120" value="Новый объект" /></label>
+              <label>X<input name="x" type="number" min="0" max="1" step="0.01" value="0.1" required /></label>
+              <label>Y<input name="y" type="number" min="0" max="1" step="0.01" value="0.1" required /></label>
+              <label>Ширина<input name="width" type="number" min="0.01" max="1" step="0.01" value="0.2" required /></label>
+              <label>Высота<input name="height" type="number" min="0.01" max="1" step="0.01" value="0.12" required /></label>
+              <label>Поворот<input name="rotation" type="number" min="0" max="359.99" step="1" value="0" required /></label>
+              <button type="submit">Добавить элемент</button>
+            </form>
+          </section>
+
+          <section>
+            <h2>Добавить место</h2>
+            <form id="place-form" class="field-grid">
+              <label>Тип
+                <select name="type">
+                  <option value="entrance">Вход</option>
+                  <option value="registration">Регистрация</option>
+                  <option value="service">Сервисная точка</option>
+                </select>
+              </label>
+              <label>Название<input name="name" required maxlength="120" value="Новое место" /></label>
+              <label>Категория<input name="category" maxlength="80" value="Сервис" /></label>
+              <label>Описание<input name="description" maxlength="2000" value="" /></label>
+              <label>X<input name="x" type="number" min="0" max="1" step="0.01" value="0.5" required /></label>
+              <label>Y<input name="y" type="number" min="0" max="1" step="0.01" value="0.5" required /></label>
+              <button type="submit">Добавить место</button>
+            </form>
+          </section>
+        </aside>
+      </section>
+
+      <section class="objects-panel">
+        <div>
+          <h2>Элементы плана</h2>
+          <div id="elements-list" class="object-list"></div>
+        </div>
+        <div>
+          <h2>Места</h2>
+          <div id="places-list" class="object-list"></div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/test/venue-test.js"></script>
+  </body>
+</html>

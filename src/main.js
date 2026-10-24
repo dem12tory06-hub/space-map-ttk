@@ -18,7 +18,17 @@ const screens = {
     <div class="empty"><span class="empty-mark" aria-hidden="true">⌖</span><p>Опубликованной карты пока нет</p></div>`,
 };
 
-if (window.location.pathname === '/editor/demo') {
+if (window.location.pathname === '/constructor') {
+  root.classList.remove('shell');
+  const { mountConstructor } = await import('./constructor/constructor.js');
+  mountConstructor(root);
+} else if (/^\/map\/[^/]+$/.test(window.location.pathname) && window.location.pathname !== '/map/demo') {
+  root.innerHTML = `
+    <a class="back" href="/">← На главную</a>
+    <div class="eyebrow">Для посетителя</div>
+    <h1>Просмотр площадки ещё не подключён.</h1>
+    <p class="intro">Ссылка ведёт на площадку, но компонент просмотра готовит участник 2.</p>`;
+} else if (window.location.pathname === '/editor/demo') {
   // У редактора своя адаптивная оболочка без ограничений стартового экрана.
   root.classList.remove('shell');
   const { mountEditor } = await import('./editor/editor.js');
