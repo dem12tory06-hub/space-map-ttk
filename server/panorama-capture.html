@@ -86,6 +86,19 @@
     }
 
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    /* Same dark-green and yellow palette as the organizer and visitor pages. */
+    body { background:#09130d; color:#f2f6e7; color-scheme:dark; }
+    section,.photo { background:#192e20; border:1px solid #72905c; color:#f2f6e7; }
+    h1,h2,strong { color:#f2f6e7; }
+    a { color:#d9ed98; }
+    button,select,input,textarea { background:#203a29; color:#f4f8e9; border:1px solid #9ab279; border-radius:10px; }
+    button:hover:not(:disabled) { background:#3f6037; border-color:#d9ed98; }
+    button:focus-visible,input:focus-visible,select:focus-visible { outline:3px solid #d9ed98; outline-offset:2px; }
+    button[type="submit"],#stitch { background:#d9ed98; color:#17271a; font-weight:700; }
+    .hint,.filename { color:#c7d6b5; }
+    #message { color:#ffc0aa; }
+    .photo img { background:#102217; }
+    input[type="file"]::file-selector-button { background:#d9ed98; color:#17271a; border:0; border-radius:8px; padding:8px; }
   </style>
 </head>
 

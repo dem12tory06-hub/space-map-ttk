@@ -11,10 +11,10 @@ export function mountVisitorShell(container, mountMap) {
     <svg class="visitor-shell__wires" viewBox="0 0 1200 900" preserveAspectRatio="none" aria-hidden="true">
       <defs>
         <linearGradient id="visitor-wave-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#F4A7C8" />
-          <stop offset="34%" stop-color="#FDB98E" />
-          <stop offset="66%" stop-color="#8EDBFF" />
-          <stop offset="100%" stop-color="#4B89FF" />
+          <stop offset="0%" stop-color="#D9ED98" />
+          <stop offset="34%" stop-color="#E8D885" />
+          <stop offset="66%" stop-color="#AFC477" />
+          <stop offset="100%" stop-color="#D9ED98" />
         </linearGradient>
       </defs>
       <g class="visitor-shell__wave">

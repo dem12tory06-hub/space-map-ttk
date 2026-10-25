@@ -771,7 +771,7 @@ export function mountConstructor(container) {
       <section class="constructor-app" aria-label="Конструктор площадки">
         <header class="constructor-header">
           <div class="constructor-header__identity">
-            <span class="constructor-mark" aria-hidden="true">К</span>
+            <a class="constructor-brand" href="/" aria-label="Карта пространства — на главную">Карта<span>пространства</span></a>
             <div><strong data-role="venue-title"></strong><small data-role="venue-id"></small></div>
           </div>
           <div class="constructor-header__actions">

@@ -20,6 +20,7 @@ const pages = new Map([
 const assets = new Map([
   ['/src/main.js', [new URL('../src/main.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/src/styles/base.css', [new URL('../src/styles/base.css', import.meta.url), 'text/css; charset=utf-8']],
+  ['/src/styles/theme.css', [new URL('../src/styles/theme.css', import.meta.url), 'text/css; charset=utf-8']],
   ['/src/visitor/visitor-shell.js', [new URL('../src/visitor/visitor-shell.js', import.meta.url), 'text/javascript; charset=utf-8']],
   ['/src/visitor/visitor-shell.css', [new URL('../src/visitor/visitor-shell.css', import.meta.url), 'text/css; charset=utf-8']],
   ['/src/visitor/visitor-map.js', [new URL('../src/visitor/visitor-map.js', import.meta.url), 'text/javascript; charset=utf-8']],

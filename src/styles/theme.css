@@ -1,0 +1,86 @@
+/* Shared dark green and warm yellow visual language across both roles. */
+:root { --space-night:#090e0b; --space-deep:#14251b; --space-forest:#203c2b; --space-lime:#d9ed98; --space-cream:#f4f5e9; --space-border:#9eb47a; --accent:#d9ed98; }
+.topbar {max-width:none;background:var(--space-night);border-color:#344832;color:var(--space-cream)}
+.topbar .brand {color:var(--space-cream)}
+.topbar .brand span {color:var(--space-lime)}
+.topbar .case {color:#cfdeb8}
+.home-hero {background:radial-gradient(ellipse at 74% 68%,#1c311f,transparent 46%),var(--space-night)}
+.home-hero::before,.home-hero::after {border-color:#d9ed9870;box-shadow:0 28px 0 -1px #d9ed9840,0 56px 0 -1px #d9ed9828,0 84px 0 -1px #d9ed981b}
+.home-map-link {background:linear-gradient(145deg,#254b32,#11271d 72%);border-color:#dfedb4}
+.home-organizer-link {background:#d9ed9814;backdrop-filter:blur(12px)}
+/* Visitor page: preserve the map contrast while replacing the former blue and violet chrome. */
+.visitor-shell {background:radial-gradient(ellipse at 82% 34%,#2d42234d,transparent 48%),radial-gradient(ellipse at 10% 80%,#59703929,transparent 46%),var(--space-night);color:var(--space-cream)}
+.visitor-shell__wave {stroke:#d9ed98;opacity:.42}
+.visitor-shell__wave ellipse {filter:drop-shadow(0 0 5px #d9ed9850)}
+.visitor-shell__spark {stroke:var(--space-lime)}
+.visitor-shell__back,.visitor-shell__role {border:1px solid #b8cf92;border-radius:999px;background:#d9ed981a;color:var(--space-cream);backdrop-filter:blur(14px);box-shadow:0 8px 22px #0003}
+.visitor-shell__role {background:linear-gradient(100deg,#2d5034dc,#547447bb);color:var(--space-cream)}
+.visitor-shell__role-mark {border-color:var(--space-lime);color:var(--space-lime)}
+.visitor-shell__back:hover,.visitor-shell__role:hover {background:#d9ed9838;border-color:var(--space-lime)}
+.visitor-shell__heading p,.visitor-shell__empty-icon {color:var(--space-lime)}
+.visitor-shell__heading h1 {color:var(--space-cream)}
+.visitor-shell__venue,.visitor-shell__hint {color:#d6e3c4}
+.visitor-shell__device {border-color:#aec682;background:#1b3022}
+.visitor-shell__screen,.visitor-shell__screenbar {background:#1b3524;color:var(--space-cream)}
+.visitor-shell__map-slot {background:linear-gradient(125deg,#213b2b,#12241a)}
+.visitor-map {color:var(--space-cream)}
+.visitor-map__toolbar select {border-color:#9db482}
+.visitor-map__toolbar button,.visitor-map__card button {border-color:#94ad73;background:#456f40;color:#fff}
+.visitor-map__toolbar button:hover,.visitor-map__card button:hover {background:#5c824a}
+.visitor-map__card {border-color:#94ad73;background:#1d3827}
+/* Organizer controls share the same brand while the plan canvas stays readable. */
+.constructor-header {background:var(--space-night);border-color:#48623e;color:var(--space-cream)}
+.constructor-header__identity small,.constructor-save-status,.constructor-share-note {color:#c9d9b9!important}
+.constructor-brand {display:block;flex:none;color:var(--space-cream);text-decoration:none;font-size:15px;font-weight:800;line-height:1}
+.constructor-brand span {display:block;color:var(--space-lime)}
+.constructor-header__actions > button,.constructor-header__actions > a {border-radius:999px;background:#d9ed9817;color:var(--space-cream);border-color:#a4b98b;backdrop-filter:blur(8px)}
+.constructor-header__actions > button:hover:not(:disabled),.constructor-header__actions > a:hover {background:#d9ed9835;color:#fff}
+.constructor-primary {border-color:#b2c778!important;background:#668348!important;color:#fff!important;border-radius:999px!important}
+.constructor-access {background:radial-gradient(circle at 80% 10%,#294328,var(--space-night) 70%)}
+.constructor-access__form {border:1px solid #7f9a6b;border-radius:22px;box-shadow:0 20px 55px #0004}
+.constructor-eyebrow {color:#4e723c}
+.constructor-page button:focus-visible,.constructor-page input:focus-visible,.visitor-shell a:focus-visible {outline:3px solid var(--space-lime);outline-offset:3px}
+@media(max-width:650px){.constructor-brand{font-size:13px}.constructor-header{gap:8px}.visitor-shell__back,.visitor-shell__role{padding:10px 14px}}
+
+/* Complete dark theme for the organizer workspace, including its blank plan. */
+body.constructor-page {background:#09130d;color:#edf3df;color-scheme:dark}
+.constructor-app,.constructor-layout {background:#0d1b12;color:#edf3df}
+.constructor-left-panel,.constructor-right-panel {background:#14251b;color:#edf3df;border-color:#3d5634}
+.constructor-page button:not(.constructor-primary),.constructor-page input,.constructor-page textarea,.constructor-page select {background:#203728;color:#f2f5e9;border:1px solid #7f9869;border-radius:9px}
+.constructor-page button:hover:not(:disabled) {background:#385539;border-color:#d9ed98}
+.constructor-page input::placeholder,.constructor-page textarea::placeholder {color:#bacaa9}
+.constructor-page input[type="file"] {color:#e9efda}
+.constructor-page input[type="file"]::file-selector-button {background:#d9ed98;color:#17271a;border:0;border-radius:8px;padding:7px;margin-right:9px;cursor:pointer}
+.constructor-page select option {background:#203728;color:#fff}
+.constructor-page .constructor-primary {background:#d9ed98!important;border-color:#d9ed98!important;color:#17271a!important}
+.constructor-tabs {border-color:#48623e}
+.constructor-tabs [aria-selected="true"],.constructor-tools button[aria-pressed="true"],.constructor-panorama-actions button[aria-pressed="true"],.constructor-list-item[aria-current="true"] {background:#435c30!important;border-color:#d9ed98!important;color:#f8ffdc!important}
+.constructor-help,.constructor-background-edit-controls {background:#213927;border-color:#77915c;color:#edf3df}
+.constructor-help summary,.constructor-background-edit-controls strong,.constructor-eyebrow {color:#d9ed98}
+.constructor-panel-heading,.constructor-tool-hint,.constructor-empty,.constructor-panorama-status,.constructor-object-list h3,.constructor-list-item small,.constructor-mode-label,.constructor-background-upload,.constructor-background-opacity,.constructor-access__venue,.constructor-access__hint {color:#c4d4af}
+.constructor-route-edges > div,.constructor-route-point-row,.constructor-properties {border-color:#4a6243}
+.constructor-canvas-toolbar {background:#192e20;border-color:#4a6243;color:#eef4df}
+.constructor-canvas-viewport {background:#0d1d14}
+.constructor-plan-background {fill:#1b3022;stroke:#9bb879}
+.constructor-canvas-label {fill:#f0f6df;paint-order:stroke;stroke:#102017;stroke-width:3px;stroke-linejoin:round}
+.constructor-place-label {fill:#fff0a8;paint-order:stroke;stroke:#14271b;stroke-width:3px;stroke-linejoin:round}
+.constructor-background-edit-frame {stroke:#d9ed98}
+.constructor-resize-handle,.constructor-background-resize-handle,.constructor-route-waypoint {fill:#d9ed98;stroke:#47623a}
+.constructor-selection-outline,.constructor-place-selection {stroke:#e7f5a5}
+.constructor-page .constructor-header__actions > button:not(.constructor-primary),.constructor-page .constructor-header__actions > a {background:#d9ed981a;color:#f0f5df;border:1px solid #b0c687;border-radius:999px}
+.constructor-page .constructor-header__actions > button:hover:not(:disabled),.constructor-page .constructor-header__actions > a:hover {background:#d9ed983c}
+.constructor-header__actions [data-role="visitor-preview"] {background:#d9ed981a!important;color:#f2f7e2!important;border-color:#b0c687!important;border-radius:999px!important}
+.constructor-access__form {background:#192e20;color:#f1f5e8;border-color:#8ea86b}
+.constructor-access__form a {color:#d9ed98}
+.constructor-save-status[data-kind="error"],.constructor-access__hint[data-kind="error"] {color:#ffb1a4!important}
+.constructor-danger {color:#ffc2a9!important}
+/* Visitor plan and panorama controls share the same green canvas. */
+.visitor-map__canvas {background:#1b3022;border:1px solid #718b5b}
+.visitor-map__canvas svg > rect:first-child {fill:#1b3022}
+.visitor-map__label {fill:#f3f6e8;stroke:#173020;stroke-width:4px}
+.visitor-map__card {background:#203a29;border-color:#8ca667}
+.panorama-overlay {background:#09130d;color:#f1f6e5}
+.panorama-overlay__bar {background:#172d1d;border-bottom:1px solid #78945f}
+.panorama-overlay__bar button {background:#365536a8;border-color:#b7cb8a;color:#f4f8e6;border-radius:999px}
+.panorama-overlay__bar button:hover {background:#547443}
+.panorama-overlay__info {background:#203a29ef;border:1px solid #aac384;color:#f4f8e6}
