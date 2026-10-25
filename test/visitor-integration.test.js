@@ -5,8 +5,24 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { createAppServer } from '../server/app.js';
 import { createVenueStore } from '../server/venue-store.js';
-import { routeBetween } from '../src/visitor/visitor-map.js';
+import { coverMapView, panMapView, routeBetween, zoomMapView } from '../src/visitor/visitor-map.js';
 import { navigationTargets } from '../src/shared/navigation-targets.js';
+
+test('mobile map zoom keeps the touched location fixed and pans only within the plan', () => {
+  const full = { x: 0, y: 0, width: 1000, height: 600 };
+  const zoomed = zoomMapView(full, 0.5, { x: 700, y: 300 });
+  assert.deepEqual(zoomed, { x: 350, y: 150, width: 500, height: 300 });
+  assert.deepEqual(panMapView(zoomed, 1000, -1000), { x: 0, y: 300, width: 500, height: 300 });
+  assert.deepEqual(zoomMapView(zoomed, 10, { x: 700, y: 300 }), full);
+  assert.equal(zoomMapView(full, 0.01, { x: 0, y: 0 }).width, 200);
+  const portrait = coverMapView(390, 700);
+  assert.equal(portrait.height, 600);
+  assert.equal(portrait.width, 390 / 700 * 600);
+  assert.equal(portrait.x + portrait.width / 2, 500);
+  const closer = zoomMapView(portrait, 0.5, { x: 500, y: 300 }, portrait);
+  assert.equal(closer.width, portrait.width / 2);
+  assert.equal(closer.height, 300);
+});
 
 test('organizer venue is available on the visitor route and demo redirects to real entry points', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'visitor-map-'));

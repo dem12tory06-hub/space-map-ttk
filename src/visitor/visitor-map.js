@@ -4,6 +4,37 @@ import { isWalkableAt, planRoute } from '../shared/pathfinder.js';
 const NS = 'http://www.w3.org/2000/svg';
 const WIDTH = 1000;
 const HEIGHT = 600;
+const MAX_ZOOM = 5;
+
+export function zoomMapView(view, factor, anchor, base = { width: WIDTH, height: HEIGHT }) {
+  const width = Math.max(base.width / MAX_ZOOM, Math.min(base.width, view.width * factor));
+  const height = view.height * width / view.width;
+  const scale = width / view.width;
+  return {
+    x: Math.max(0, Math.min(WIDTH - width, anchor.x - (anchor.x - view.x) * scale)),
+    y: Math.max(0, Math.min(HEIGHT - height, anchor.y - (anchor.y - view.y) * scale)),
+    width, height,
+  };
+}
+
+export function coverMapView(canvasWidth, canvasHeight, center = { x: WIDTH / 2, y: HEIGHT / 2 }) {
+  const ratio = canvasWidth / canvasHeight;
+  const width = Math.min(WIDTH, HEIGHT * ratio);
+  const height = Math.min(HEIGHT, WIDTH / ratio);
+  return {
+    x: Math.max(0, Math.min(WIDTH - width, center.x - width / 2)),
+    y: Math.max(0, Math.min(HEIGHT - height, center.y - height / 2)),
+    width, height,
+  };
+}
+
+export function panMapView(view, dx, dy) {
+  return {
+    ...view,
+    x: Math.max(0, Math.min(WIDTH - view.width, view.x - dx)),
+    y: Math.max(0, Math.min(HEIGHT - view.height, view.y - dy)),
+  };
+}
 
 function svg(name, attributes = {}) {
   const node = document.createElementNS(NS, name);
@@ -113,7 +144,7 @@ export function mountVisitorMap(container, venueId) {
       for (const label of shell?.querySelectorAll('.visitor-shell__heading h1, .visitor-shell__venue, .visitor-shell__screen-venue') ?? []) {
         label.textContent = venue.name;
       }
-      renderVenue(container, venue, floor);
+      renderVenue(container, venue, floor, controller.signal);
     })
     .catch((error) => {
       if (!controller.signal.aborted) {
@@ -128,7 +159,7 @@ export function mountVisitorMap(container, venueId) {
   return () => controller.abort();
 }
 
-function renderVenue(container, venue, floor) {
+function renderVenue(container, venue, floor, signal) {
   container.innerHTML = `
     <div class="visitor-map">
       <div class="visitor-map__toolbar">
@@ -138,17 +169,37 @@ function renderVenue(container, venue, floor) {
         <button type="button" data-pick-start>Старт на плане</button>
         <button type="button" data-pick-finish>Финиш на плане</button>
       </div>
-      <p class="visitor-map__status" data-status role="status">Нажмите на место на плане.</p>
-      <div class="visitor-map__canvas">
-        <svg viewBox="0 0 1000 600" role="img" aria-label="План площадки с местами и панорамами" data-svg></svg>
+      <div class="visitor-map__window" data-map-window>
+        <div class="visitor-map__window-header">
+          <strong>План площадки</strong>
+          <div class="visitor-map__window-actions">
+            <button type="button" data-route-expanded>Путь</button>
+            <button type="button" data-map-toggle aria-expanded="false">Развернуть карту</button>
+          </div>
+        </div>
+        <p class="visitor-map__status" data-status role="status">Нажмите на место на плане.</p>
+        <div class="visitor-map__canvas" data-map-canvas>
+          <svg viewBox="0 0 1000 600" role="img" aria-label="План площадки с местами и панорамами" data-svg></svg>
+        </div>
+        <div class="visitor-map__zoom" aria-label="Масштаб карты">
+          <span class="visitor-map__zoom-hint">Двумя пальцами увеличьте карту; одним пальцем двигайте её</span>
+          <button type="button" data-zoom-out aria-label="Уменьшить карту">−</button>
+          <output data-zoom-label aria-live="polite">100%</output>
+          <button type="button" data-zoom-in aria-label="Увеличить карту">+</button>
+          <button type="button" data-zoom-reset>Весь план</button>
+        </div>
+        <section class="visitor-map__card" data-card hidden>
+          <h2 data-card-title></h2><p data-card-description></p>
+          <button type="button" data-open-panorama hidden>Осмотреть панораму</button>
+        </section>
       </div>
       <div class="visitor-map__legend" data-legend aria-label="Условные обозначения"></div>
-      <section class="visitor-map__card" data-card hidden>
-        <h2 data-card-title></h2><p data-card-description></p>
-        <button type="button" data-open-panorama hidden>Осмотреть панораму</button>
-      </section>
     </div>`;
   const image = container.querySelector('[data-svg]');
+  const mapWindow = container.querySelector('[data-map-window]');
+  const mapCanvas = container.querySelector('[data-map-canvas]');
+  const mapToggle = container.querySelector('[data-map-toggle]');
+  const zoomReset = container.querySelector('[data-zoom-reset]');
   const status = container.querySelector('[data-status]');
   const card = container.querySelector('[data-card]');
   const start = container.querySelector('[data-start]');
@@ -160,6 +211,125 @@ function renderVenue(container, venue, floor) {
   let customStart = null;
   let customFinish = null;
   let picking = null;
+  let view = { x: 0, y: 0, width: WIDTH, height: HEIGHT };
+  let baseView = { ...view };
+  let compactView = { ...view };
+  const pointers = new Map();
+  let gestureMoved = false;
+  let suppressClick = false;
+
+  function updateView(next) {
+    view = next;
+    image.setAttribute('viewBox', `${view.x} ${view.y} ${view.width} ${view.height}`);
+    const zoom = Math.round(baseView.width / view.width * 100);
+    container.querySelector('[data-zoom-label]').value = `${zoom}%`;
+    container.querySelector('[data-zoom-out]').disabled = view.width >= baseView.width - 0.01;
+    container.querySelector('[data-zoom-in]').disabled = view.width <= baseView.width / MAX_ZOOM + 0.01;
+  }
+
+  function mapPoint(clientX, clientY) {
+    const point = image.createSVGPoint();
+    point.x = clientX;
+    point.y = clientY;
+    return point.matrixTransform(image.getScreenCTM().inverse());
+  }
+
+  function zoomAt(clientX, clientY, factor) {
+    updateView(zoomMapView(view, factor, mapPoint(clientX, clientY), baseView));
+  }
+
+  function expandedBase(center) {
+    const bounds = mapCanvas.getBoundingClientRect();
+    return coverMapView(Math.max(1, bounds.width), Math.max(1, bounds.height), center);
+  }
+
+  function setExpanded(expanded) {
+    if (expanded === mapWindow.classList.contains('is-expanded')) return;
+    if (expanded) compactView = { ...view };
+    mapWindow.classList.toggle('is-expanded', expanded);
+    mapToggle.setAttribute('aria-expanded', String(expanded));
+    mapToggle.textContent = expanded ? 'Свернуть карту' : 'Развернуть карту';
+    zoomReset.textContent = expanded ? 'По центру' : 'Весь план';
+    if (expanded) {
+      baseView = expandedBase({ x: view.x + view.width / 2, y: view.y + view.height / 2 });
+      updateView(baseView);
+    } else {
+      baseView = { x: 0, y: 0, width: WIDTH, height: HEIGHT };
+      updateView(compactView);
+    }
+  }
+  mapToggle.addEventListener('click', () => setExpanded(!mapWindow.classList.contains('is-expanded')));
+  container.querySelector('[data-route-expanded]').addEventListener('click', () => container.querySelector('[data-route]').click());
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setExpanded(false);
+  }, { signal });
+  window.addEventListener('resize', () => {
+    if (!mapWindow.classList.contains('is-expanded')) return;
+    const center = { x: view.x + view.width / 2, y: view.y + view.height / 2 };
+    const zoom = baseView.width / view.width;
+    baseView = expandedBase(center);
+    updateView(zoomMapView(baseView, 1 / zoom, center, baseView));
+  }, { signal });
+
+  for (const [selector, factor] of [['[data-zoom-in]', 1 / 1.5], ['[data-zoom-out]', 1.5]]) {
+    container.querySelector(selector).addEventListener('click', () => {
+      const bounds = image.getBoundingClientRect();
+      zoomAt(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2, factor);
+    });
+  }
+  zoomReset.addEventListener('click', () => updateView(baseView));
+
+  image.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (pointers.size === 0) suppressClick = false;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
+    if (pointers.size > 1) gestureMoved = true;
+  });
+  image.addEventListener('pointermove', (event) => {
+    const previous = pointers.get(event.pointerId);
+    if (!previous) return;
+    const dx = event.clientX - previous.x;
+    const dy = event.clientY - previous.y;
+    if (Math.hypot(event.clientX - previous.startX, event.clientY - previous.startY) > 6) gestureMoved = true;
+    if (pointers.size === 2) {
+      const other = [...pointers].find(([id]) => id !== event.pointerId)?.[1];
+      if (other) {
+        const oldDistance = Math.hypot(previous.x - other.x, previous.y - other.y);
+        const newDistance = Math.hypot(event.clientX - other.x, event.clientY - other.y);
+        const oldMid = { x: (previous.x + other.x) / 2, y: (previous.y + other.y) / 2 };
+        if (oldDistance > 0 && newDistance > 0) {
+          const anchor = mapPoint(oldMid.x, oldMid.y);
+          const zoomed = zoomMapView(view, oldDistance / newDistance, anchor, baseView);
+          const bounds = image.getBoundingClientRect();
+          updateView(panMapView(zoomed, dx * zoomed.width / bounds.width / 2, dy * zoomed.height / bounds.height / 2));
+        }
+      }
+    } else if (view.width < baseView.width && gestureMoved || mapWindow.classList.contains('is-expanded') && gestureMoved) {
+      const bounds = image.getBoundingClientRect();
+      updateView(panMapView(view, dx * view.width / bounds.width, dy * view.height / bounds.height));
+    }
+    pointers.set(event.pointerId, { ...previous, x: event.clientX, y: event.clientY });
+  });
+  function endPointer(event) {
+    if (!pointers.has(event.pointerId)) return;
+    pointers.delete(event.pointerId);
+    if (gestureMoved) suppressClick = true;
+    if (pointers.size === 0) gestureMoved = false;
+  }
+  image.addEventListener('pointerup', endPointer);
+  image.addEventListener('pointercancel', endPointer);
+  image.addEventListener('pointerleave', endPointer);
+  image.addEventListener('wheel', (event) => {
+    if (!event.ctrlKey && event.pointerType !== 'touch') return;
+    event.preventDefault();
+    zoomAt(event.clientX, event.clientY, event.deltaY > 0 ? 1.12 : 1 / 1.12);
+  }, { passive: false });
+  image.addEventListener('click', (event) => {
+    if (!suppressClick) return;
+    suppressClick = false;
+    event.stopImmediatePropagation();
+  }, true);
+  updateView(view);
 
   for (const select of [start, finish]) {
     select.append(new Option('Выберите место', ''));
@@ -243,6 +413,9 @@ function renderVenue(container, venue, floor) {
       const icon = svg('text', { x: point.x, y: point.y + 7, 'text-anchor': 'middle', fill: '#fff', 'font-size': 20 });
       icon.textContent = '◉';
       marker.append(icon);
+      const label = svg('text', { x: point.x + 23, y: point.y - 18, class: 'visitor-map__label visitor-map__label--panorama' });
+      label.textContent = panorama.name;
+      marker.append(label);
       image.append(marker);
     }
   }
@@ -370,6 +543,7 @@ function renderVenue(container, venue, floor) {
   card.querySelector('[data-open-panorama]').addEventListener('click', async () => {
     const panorama = floor.panoramaPoints.find((item) => item.id === selectedPanoramaId);
     if (!panorama || !panoramaImageUrl(venue, floor, panorama)) return;
+    setExpanded(false);
     const { openPanorama } = await import('../panorama/panorama-viewer.js');
     const scenes = floor.panoramaPoints.map((point) => ({
       ...point, imageUrl: panoramaImageUrl(venue, floor, point),

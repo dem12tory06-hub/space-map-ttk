@@ -9,6 +9,13 @@ tmp/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+*.sqlite3
+*.db
+*.zip
+*.tgz
+*.pem
+*.key
+.venv/
 tools/panorama-stitch/.venv/
 tools/panorama-stitch/panoramas/
 **/__pycache__/
