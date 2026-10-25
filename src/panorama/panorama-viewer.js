@@ -23,6 +23,8 @@ function loadPannellum() {
 export async function openPanorama(container, panoramaPoints, firstId, places) {
   const scenes = panoramaPoints.filter((point) => point.imageUrl);
   if (!scenes.some((point) => point.id === firstId)) return;
+  // Opt-in trial for an OpenCV strip. The normal link keeps the photographed edges.
+  const trialFullRotation = new URLSearchParams(window.location.search).get('pano360') === '1';
   const previousFocus = document.activeElement;
   const overlay = document.createElement('div');
   overlay.className = 'panorama-overlay';
@@ -94,14 +96,14 @@ export async function openPanorama(container, panoramaPoints, firstId, places) {
         });
       }
       const stitched = /^\/api\/panoramas\/[a-f0-9]{32}\.jpg$/.test(point.imageUrl);
-      const haov = stitched ? Math.min(point.haov ?? 180, 180) : (point.haov ?? 360);
+      const haov = stitched ? (trialFullRotation ? 360 : Math.min(point.haov ?? 180, 180)) : (point.haov ?? 360);
       const vaov = stitched ? Math.min(point.vaov ?? 120, 120) : (point.vaov ?? 180);
       sceneConfig[point.id] = {
         type: 'equirectangular', panorama: point.imageUrl, title: point.name,
         haov, vaov, vOffset: point.vOffset ?? 0,
-        // OpenCV stitches a partial view. Stop rotation at its photographed edges.
+        // OpenCV usually stitches a partial view; only the trial treats it as a loop.
         ...(stitched ? {
-          minYaw: -haov / 2, maxYaw: haov / 2,
+          ...(!trialFullRotation ? { minYaw: -haov / 2, maxYaw: haov / 2 } : {}),
           minPitch: -vaov / 2, maxPitch: vaov / 2,
           hfov: 65, maxHfov: 75, ignoreGPanoXMP: true,
         } : {}),
