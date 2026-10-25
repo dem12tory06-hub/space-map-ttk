@@ -1,6 +1,7 @@
 // Один рабочий конструктор и просмотр существующей площадки по её ID.
 const root = document.querySelector('#app');
 const path = window.location.pathname;
+const manezhVenueId = '6e03d42c-872f-4f2b-8b20-42b0b1ecaefc';
 
 if (path === '/constructor') {
   root.classList.remove('shell');
@@ -8,7 +9,8 @@ if (path === '/constructor') {
   mountConstructor(root);
 } else if (/^\/map\/[^/]+$/.test(path)) {
   root.classList.remove('shell');
-  const venueId = decodeURIComponent(path.slice('/map/'.length));
+  const requestedVenue = decodeURIComponent(path.slice('/map/'.length));
+  const venueId = requestedVenue === 'manezh' ? manezhVenueId : requestedVenue;
   const [{ mountVisitorShell }, { mountVisitorMap }] = await Promise.all([
     import('./visitor/visitor-shell.js'),
     import('./visitor/visitor-map.js'),
@@ -19,7 +21,8 @@ if (path === '/constructor') {
     <a class="back" href="/">← На главную</a>
     <div class="eyebrow">Для посетителя</div>
     <h1>Откройте план площадки</h1>
-    <p class="intro">Введите ID площадки из ссылки организатора.</p>
+    <p class="intro"><a href="/map/manezh">Открыть карту манежа ↗</a></p>
+    <p>Для другой площадки введите её ID:</p>
     <form id="venue-link-form">
       <label for="venue-link-id">ID площадки</label>
       <input id="venue-link-id" name="venue" required autocomplete="off">
@@ -43,7 +46,7 @@ if (path === '/constructor') {
           <div class="home-venue"><span class="home-venue__icon" aria-hidden="true">⌖</span><span><strong>Манеж ДГТУ</strong><small>Ростов-на-Дону · Юфимцева, 16</small></span></div>
         </div>
         <div class="home-actions">
-          <a class="home-map-link" href="/map" aria-label="Для посетителя: открыть карту площадки">
+          <a class="home-map-link" href="/map/manezh" aria-label="Для посетителя: открыть карту площадки">
             <span class="home-map-link__dots" aria-hidden="true">•••</span>
             <span class="home-map-link__label" aria-hidden="true">КАРТА / МАНЕЖ</span>
             <svg class="home-map-link__route" viewBox="0 0 280 190" aria-hidden="true"><path d="M40 145 C65 100 135 155 145 83 S205 100 245 42"/><circle cx="40" cy="145" r="10"/><circle cx="245" cy="42" r="10"/></svg>
