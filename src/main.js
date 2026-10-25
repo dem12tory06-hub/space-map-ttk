@@ -41,7 +41,7 @@ if (path === '/constructor') {
       <div class="home-hero__content">
         <div class="home-copy">
           <p class="home-eyebrow">Карта пространства</p>
-          <h1 id="home-title">Откройте пространство.<br><em>Найдите свой путь.</em></h1>
+          <h1 id="home-title">Откройте пространство<br><em>Найдите свой путь</em></h1>
           <p>Посмотрите план площадки, постройте маршрут и осмотрите панорамы прямо на телефоне.</p>
 
         </div>
